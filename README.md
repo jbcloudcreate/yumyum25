@@ -25,6 +25,18 @@ Whether it's **PowerShell for domain migrations**, **Bash for server backups**, 
 
 ---
 
+📜 License
+
+This project is licensed under the MIT License — feel free to use, adapt, and share.
+
+---
+
+🤝 Contributing
+
+Pull requests, improvements, and ideas are welcome!
+If you spot something broken or want to share an optimization, open an issue or PR.
+
+
 ## 🔧 Usage
 Clone the repo:
 
@@ -32,11 +44,3 @@ Clone the repo:
 git clone https://github.com/<your-username>/<your-repo>.git
 cd <your-repo>
 
-📜 License
-
-This project is licensed under the MIT License — feel free to use, adapt, and share.
-
-🤝 Contributing
-
-Pull requests, improvements, and ideas are welcome!
-If you spot something broken or want to share an optimization, open an issue or PR.
