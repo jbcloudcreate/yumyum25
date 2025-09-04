@@ -1,5 +1,13 @@
 # 🖥️ James' Infra & Home-Lab Scripts
 
+![GitHub last commit](https://img.shields.io/github/last-commit/<your-username>/<your-repo>?style=flat-square)  
+![GitHub repo size](https://img.shields.io/github/repo-size/<your-username>/<your-repo>?style=flat-square)  
+![GitHub license](https://img.shields.io/github/license/<your-username>/<your-repo>?style=flat-square)  
+![GitHub top language](https://img.shields.io/github/languages/top/<your-username>/<your-repo>?style=flat-square)  
+![GitHub pull requests](https://img.shields.io/github/issues-pr/<your-username>/<your-repo>?style=flat-square)  
+
+---
+
 Welcome to my **script vault** — a central repo where I keep the tools, helpers, and one-off automations that power both my **professional infra projects** and my **personal home-lab**.  
 
 If you’re into **Windows Server, Active Directory, AWS, TrueNAS, Docker, Grafana**, or just making your life easier with a bit of code, you’ll probably find something interesting here.  
