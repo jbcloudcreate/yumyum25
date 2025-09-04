@@ -1,46 +1,56 @@
-# 🚀 James' Project Scripts
+# 🖥️ James' Infra & Home-Lab Scripts
 
-Welcome to my GitHub hub for all things **scripts & automation**.  
-This repo is a collection of handy tools, snippets, and project-specific scripts I use to keep ongoing work running smoothly.  
+Welcome to my **script vault** — a central repo where I keep the tools, helpers, and one-off automations that power both my **professional infra projects** and my **personal home-lab**.  
 
-Whether it's **PowerShell for domain migrations**, **Bash for server backups**, or **Python for log analysis**, you'll probably find something useful here.  
-
----
-
-## 📂 Repository Structure
-- `powershell/` → Infrastructure automation, AD/domain scripts, PDQ integrations  
-- `bash/` → Backup & monitoring scripts for Linux, Pi-hole, TrueNAS, etc.  
-- `python/` → Log parsing, data processing, and reporting utilities  
-- `misc/` → One-off helpers, experiments, and fun bits  
-
-*(Structure may evolve as projects grow)*  
+If you’re into **Windows Server, Active Directory, AWS, TrueNAS, Docker, Grafana**, or just making your life easier with a bit of code, you’ll probably find something interesting here.  
 
 ---
 
-## 🛠️ Current Highlights
-- **Domain Controller Readiness Checker** → PowerShell script for validating AD migrations  
-- **Pi-hole Auto Backup** → Scheduled backup to TrueNAS with rotation logic  
-- **Grafana Log Feeder** → Promtail config + script to push Jellyfin logs into Grafana  
-- **Budget Tracker Helper** → Excel/Sheets automation scripts for household finance  
+## 📂 Repository Layout
+- `powershell/` → AD migration helpers, domain readiness checks, PDQ Deploy scripts  
+- `bash/` → Pi-hole + Nginx Proxy Manager backups, TrueNAS automations, scheduled jobs  
+- `python/` → Log analysis, Grafana data feeds, reporting tools  
+- `aws/` → CloudFormation templates, connectivity test scripts, troubleshooting helpers  
+- `misc/` → Anything that doesn’t fit neatly into a box (yet)  
 
 ---
 
-📜 License
+## ⚡ Featured Scripts
+- **🗂️ AD Domain Readiness Checker**  
+  PowerShell script for verifying DCs, GPOs, replication, and DNS health before migrations.  
 
-This project is licensed under the MIT License — feel free to use, adapt, and share.
+- **🛡️ Pi-hole Auto Backup to TrueNAS**  
+  Bash script with rotation + restore logic, keeping network DNS configs safe.  
+
+- **📊 Jellyfin Log → Grafana**  
+  Promtail + Python helpers to visualize streaming errors in Grafana dashboards.  
+
+- **☁️ AWS DC Connectivity Toolkit**  
+  Quick scripts to test RPC/135 + high ports across on-prem ↔ AWS DCs.  
+
+- **💰 Budget Tracker Automations**  
+  Excel/Sheets scripts for rolling up petrol, groceries, and “pots” into clean dashboards.  
 
 ---
 
-🤝 Contributing
+## 📊 Tech Stack in Action
+This repo pulls from my wider environment:  
 
-Pull requests, improvements, and ideas are welcome!
-If you spot something broken or want to share an optimization, open an issue or PR.
+- **On-prem** → Windows Server 2016 → 2025 DC migrations, PDQ Deploy/Inventory  
+- **Cloud** → AWS EC2 DCs, SG/NACL troubleshooting, CloudFormation infra  
+- **Home-Lab** → TrueNAS SCALE (“tank” pool), Docker Compose stacks (Jellyfin, Sonarr, qBittorrent, Pi-hole)  
+- **Monitoring** → Grafana + InfluxDB + Promtail log shipping  
 
+---
 
-## 🔧 Usage
-Clone the repo:
+## 📜 License
+MIT License — free to use, adapt, and share.  
 
-```bash
-git clone https://github.com/<your-username>/<your-repo>.git
-cd <your-repo>
+---
 
+## 🤝 Contributions
+Got an idea, optimization, or a script worth sharing? Open a PR or raise an issue.  
+
+---
+
+*"Infra runs better when you script it once, and never type it twice."*  
