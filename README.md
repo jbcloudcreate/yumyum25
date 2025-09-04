@@ -1,10 +1,12 @@
 # 🖥️ James' Infra & Home-Lab Scripts
 
-![GitHub last commit](https://img.shields.io/badge/repo-private-lightgrey?style=flat-square)
-![Scripts](https://img.shields.io/badge/focus-infra%20%26%20homelab-blue?style=flat-square)
-![PowerShell](https://img.shields.io/badge/powershell-0078d7?style=flat-square&logo=powershell&logoColor=white)
-![Bash](https://img.shields.io/badge/bash-4EAA25?style=flat-square&logo=gnu-bash&logoColor=white)
-![Python](https://img.shields.io/badge/python-3776AB?style=flat-square&logo=python&logoColor=white)
+<p align="center">
+  <img src="https://img.shields.io/badge/repo-private-lightgrey?style=flat-square" />
+  <img src="https://img.shields.io/badge/focus-infra%20%26%20homelab-blue?style=flat-square" />
+  <img src="https://img.shields.io/badge/powershell-0078d7?style=flat-square&logo=powershell&logoColor=white" />
+  <img src="https://img.shields.io/badge/bash-4EAA25?style=flat-square&logo=gnu-bash&logoColor=white" />
+  <img src="https://img.shields.io/badge/python-3776AB?style=flat-square&logo=python&logoColor=white" />
+</p>
 
 ---
 
