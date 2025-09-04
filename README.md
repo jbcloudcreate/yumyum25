@@ -1,10 +1,10 @@
 # 🖥️ James' Infra & Home-Lab Scripts
 
-![GitHub last commit](https://img.shields.io/github/last-commit/jbcloudcreate/yumyum25?style=flat-square)  
-![GitHub repo size](https://img.shields.io/github/repo-size/jbcloudcreate/yumyum25?style=flat-square)  
-![GitHub license](https://img.shields.io/github/license/jbcloudcreate/yumyum25?style=flat-square)  
-![GitHub top language](https://img.shields.io/github/languages/top/jbcloudcreate/yumyum25?style=flat-square)  
-![GitHub pull requests](https://img.shields.io/github/issues-pr/jbcloudcreate/yumyum25?style=flat-square)  
+![Private Repo](https://img.shields.io/badge/repo-private-lightgrey?style=flat-square)
+![Scripts](https://img.shields.io/badge/focus-infra%20%26%20homelab-blue?style=flat-square)
+![PowerShell](https://img.shields.io/badge/powershell-0078d7?style=flat-square&logo=powershell&logoColor=white)
+![Bash](https://img.shields.io/badge/bash-4EAA25?style=flat-square&logo=gnu-bash&logoColor=white)
+![Python](https://img.shields.io/badge/python-3776AB?style=flat-square&logo=python&logoColor=white)
 
 ---
 
