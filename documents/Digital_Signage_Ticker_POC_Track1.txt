@@ -1,0 +1,134 @@
+Ticker POC next steps
+
+Digital Signage Ticker POC – Track 1 Implementation Guide
+
+Purpose:
+This guide explains how to build a Proof of Concept (POC) digital-signage ticker using SharePoint, Power Automate, Microsoft Forms, and BrightAuthor:connected.
+It covers Track 1 (SharePoint List → Power Automate → ticker.xml → BrightAuthor) and includes the optional Form-submission workflow.
+
+1 Overview
+
+This POC demonstrates a dynamic ticker solution using existing Microsoft 365 tools.
+It uses a SharePoint List to store messages, Power Automate to generate an RSS XML file, and BrightAuthor to display these messages on digital signage.
+For the POC, data is shared using a time-limited public link with dummy, non-sensitive content only.
+
+2 Required Resources
+
+SharePoint site (e.g., https://contoso.sharepoint.com/sites/DigitalSignage)
+Power Automate (within company tenancy)
+Microsoft Forms (for message submission)
+Teams Channel (for easy access)
+BrightAuthor:connected player
+
+3 Create the SharePoint List
+
+In your site, create a list named TickerMessages.
+Add columns:
+
+Title (Single line of text)
+Priority (Choice): Normal, High
+Start (Date & Time)
+End (Date & Time)
+Sites (Choice, multi-select): HQ, Training, Local, Public
+Status (Choice): Draft, Active, Expired
+Link (Hyperlink)
+
+Create a view ActiveFeed filtered by Status = Active, sorted by Priority then Start.
+
+4 Create the Output Folder
+
+In Documents, create a folder feeds.
+Power Automate will save ticker.xml here:
+/Shared Documents/feeds/ticker.xml.
+
+5 Build the Power Automate Flow (RSS Writer)
+
+Create a Scheduled cloud flow (every 5–10 minutes).
+Get items (SharePoint) – Filter Query: Status eq 'Active'.
+Filter array (Advanced mode):
+
+@and(
+  lessOrEquals(items('Filter_array')?['fields']?['Start'], utcNow()),
+  greaterOrEquals(items('Filter_array')?['fields']?['End'], utcNow())
+)
+
+Compose (RSS XML):
+
+<rss version="2.0">
+  <channel>
+    <title>Digital Signage – POC</title>
+    <link>https://contoso.sharepoint.com/sites/DigitalSignage</link>
+    <description>Active ticker items (POC)</description>
+    @{join(
+      apply(body('Filter_array'),
+        item => concat(
+          '<item><title>', xml(item?['fields']?['Title']),
+          '</title><pubDate>', utcNow(), '</pubDate>',
+          if(equals(item?['fields']?['Link'], null()), '', concat('<link>', item?['fields']?['Link'], '</link>')),
+          '</item>'
+        )
+      ),
+      ''
+    )}
+  </channel>
+</rss>
+
+Create file (SharePoint)
+
+Folder Path: /Shared Documents/feeds
+File Name: ticker.xml
+File Content: output of Compose
+
+(Optional) Create a sharing link (Anyone, View-only, expiry 2 days).
+
+Save and run the flow.
+
+6 Seed Test Items
+
+Add two rows:
+
+“Welcome to the HQ open day (10:00–14:00)” | Priority Normal | Start now | End +4 h | Status Active
+“Car park closed 14:00–16:00 — use overflow lot” | Priority High | Start now | End +2 h | Status Active
+Run the flow → ticker.xml appears in /feeds/.
+
+7 Build the Microsoft Form
+
+Create a Form “Digital Signage Ticker (POC)”.
+Add fields: Message, Priority, Start Date/Time, End Date/Time, Sites (multi-select), Link (optional).
+Restrict to internal users.
+
+8 Connect Form to SharePoint List (Power Automate)
+
+Trigger: “When a new response is submitted” (Forms) → “Get response details”.
+Compose Start/End ISO timestamps:
+
+@{formatDateTime(concat(outputs('Get_response_details')?['body/<Start>'],'T',outputs('Get_response_details')?['body/<Start_time>']),'yyyy-MM-ddTHH:mm:ssZ')}
+@{formatDateTime(concat(outputs('Get_response_details')?['body/<End>'],'T',outputs('Get_response_details')?['body/<End_time>']),'yyyy-MM-ddTHH:mm:ssZ')}
+
+Create item (SharePoint) – map fields; set Status = Active.
+Save and test → responses appear in SharePoint.
+
+9 Add Form and List to Teams
+
+Add the Form tab (Collect responses).
+Add the SharePoint list tab (ActiveFeed view).
+
+10 Configure BrightAuthor:connected
+
+Copy ticker.xml link.
+In BrightAuthor → Data Feed → RSS → paste link.
+Bind scroll text to RSS Title.
+Refresh 1–5 min; publish and test.
+
+11 Demo Checklist
+
+Messages scroll correctly.
+Edits update ticker.xml.
+Expired items drop after End time.
+BrightAuthor refresh shows changes.
+
+12 Cleanup After Demo
+
+Delete or expire public sharing link.
+Retain flows and list for Option C upgrade.
+Note success for stakeholder review.
