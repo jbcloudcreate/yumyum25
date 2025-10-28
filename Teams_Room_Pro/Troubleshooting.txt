@@ -1,0 +1,48 @@
+Teams Rooms Pro Management
+
+| Check                                | Why it matters                                                                                   | How to confirm                                                                                                            |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------- |
+| **License assigned**                 | The room account must have a **Teams Rooms Pro license** (not Basic or Shared Device).           | In M365 Admin → Users → Active Users → search room → Licenses tab.                                                        |
+| **Device signed in as room account** | If it’s logged in with a user or cached credentials, the management agent won’t attach properly. | On the Crestron device → Settings → About → check “Signed in as”.                                                         |
+| **Teams Rooms app version**          | Must be ≥ **4.19 (Windows)** or latest **Teams Rooms on Android** build.                         | Settings → About or via the Crestron XiO Cloud.                                                                           |
+| **Internet access**                  | The device must reach Microsoft endpoints.                                                       | Confirm outbound HTTPS to `*.rooms.microsoft.com` and `*.teams.microsoft.com` isn’t being blocked by your proxy/firewall. |
+
+Crestron Flex — Platform Differences
+
+| Device Type                          | Platform                  | Notes for Management                                                                                |
+| ------------------------------------ | ------------------------- | --------------------------------------------------------------------------------------------------- |
+| **Crestron Flex UC-C / UC-M series** | Windows-based Teams Rooms | Must install the **Teams Rooms Pro Management Agent** (MSI) manually or via Intune if not bundled.  |
+| **Crestron Flex UC-B / UC-P series** | Android-based Teams Rooms | Onboarding is automatic once Teams app is signed in, provided the correct license and connectivity. |
+
+For Windows-based Crestron Devices
+
+Check the Agent Service
+On the device, open Services.msc.
+Look for Microsoft Teams Rooms Pro Management Agent.
+Status should be Running
+Startup type: Automatic
+If missing → install it manually:
+	msiexec /i TeamsRoomsManagementAgent.msi /qn
+
+Confirm Device Registration
+
+Run as admin:
+	Get-WmiObject -Namespace root\TeamsRooms -Class DeviceStatus
+
+You should see:
+	Connected : True
+	DeviceId  : <GUID>
+	
+If Connected = False, run:
+	Restart-Service TeamsRoomsManagementAgent
+
+Check TLS Inspection / Proxy
+If your org uses SSL inspection, ensure you exclude:
+	*.rooms.microsoft.com
+	rooms.microsoft.com
+	roomspro.microsoft.com
+	*.azureedge.net
+	*.servicebus.windows.net
+
+Reboot and wait 10–15 min.
+It can take a few polling cycles before the device appears in the portal.
