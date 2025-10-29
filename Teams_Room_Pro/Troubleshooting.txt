@@ -46,3 +46,34 @@ If your org uses SSL inspection, ensure you exclude:
 
 Reboot and wait 10–15 min.
 It can take a few polling cycles before the device appears in the portal.
+
+29/10/25
+
+Account token / sign-in drift
+
+Room account signed in vs cached/bad token; or signed in with the wrong UPN.
+Quick check on device: Settings → About → “Signed in as”.
+
+Time skew / NTP
+
+Even ±5 minutes can break cloud token validation.
+Quick check: w32tm /query /status and ensure NTP is reachable.
+
+Proxy / SSL inspection asymmetry
+Same VLAN ≠ same egress policy. One host may be hitting a different PAC/WPAD or bypass list.
+Quick check: 
+	netsh winhttp show proxy 
+	and the user proxy under HKCU:\Software\Microsoft\Windows\CurrentVersion\Internet Settings.
+
+Host firewall / EDR policy variance
+
+Defender Firewall or EDR (ASR rules) silently blocking SChannel, WinHTTP, or background telemetry for one host.Certificate chain differences
+
+Broken or intercepted chain to Microsoft endpoints on the failing host only.
+
+Device identity drift
+Entra ID (AAD) join state or device record problem; stale/duplicate device object; MDM channel conflicts.
+
+Test-NetConnection rooms.microsoft.com -Port 443
+Test-NetConnection login.microsoftonline.com -Port 443
+
