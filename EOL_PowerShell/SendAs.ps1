@@ -1,14 +1,15 @@
 <# 
 .SYNOPSIS
-    Grant "Send As" permission in Exchange Online with prompts.
+    Grant "Send As" permission in Exchange Online with friendly prompts.
 
 .DESCRIPTION
     - Prompts for mailbox and user identifiers.
-    - If local-parts are entered, appends the default domain (configurable).
+    - Appends a baked-in default domain if only local-parts are entered.
     - Connects to EXO (installs module if missing).
-    - Validates both objects exist.
-    - Skips if permission already present.
-    - Displays resulting Send As permissions.
+    - Shows existing FullAccess delegates BEFORE proceeding.
+    - Validates objects exist.
+    - Skips if Send As already present.
+    - Adds Send As and shows final state.
 
 .NOTES
     Author: PowerShell 🔨🤖🔧
@@ -34,7 +35,6 @@ function Ensure-EXOModule {
 
 function Ensure-EXOConnection {
     try {
-        # Try a benign cmdlet to see if we're connected
         Get-EXORecipient -ResultSize 1 -ErrorAction Stop | Out-Null
     }
     catch {
@@ -59,11 +59,10 @@ function Get-SendAsEntry {
         [Parameter(Mandatory)][string]$MailboxUPN,
         [Parameter(Mandatory)][string]$TrusteeIdentity
     )
-    # Normalize trustee text for comparison after lookup
+
     $trusteeObj = Get-Recipient -Identity $TrusteeIdentity -ErrorAction SilentlyContinue
     $trusteeCandidates = @()
     if ($trusteeObj) {
-        # Trustee often appears as DisplayName or canonical identity in Get-RecipientPermission
         $trusteeCandidates += $trusteeObj.DisplayName
         $trusteeCandidates += $trusteeObj.Name
         $trusteeCandidates += $trusteeObj.Identity
@@ -80,7 +79,6 @@ function Get-SendAsEntry {
     if ($trusteeCandidates.Count -gt 0) {
         return $perms | Where-Object { $trusteeCandidates -contains $_.Trustee }
     } else {
-        # Fallback: try direct match on provided string
         return $perms | Where-Object { $_.Trustee -eq $TrusteeIdentity }
     }
 }
@@ -101,8 +99,6 @@ $UserUPN    = Resolve-UPN -InputValue $userInput -DefaultDomain $DefaultDomain
 Write-Host ""
 Write-Host "Mailbox: $MailboxUPN" -ForegroundColor Green
 Write-Host "Grant to: $UserUPN"   -ForegroundColor Green
-$confirm = Read-Host "Proceed to grant Send As? (Y/N)"
-if ($confirm -notin @('Y','y','Yes','yes')) { Write-Host "Aborted." -ForegroundColor Yellow; exit }
 
 # Ensure module + connection
 Ensure-EXOModule
@@ -123,7 +119,35 @@ try {
     exit 1
 }
 
-# Check if permission already exists
+# --- NEW: Show current Full Access delegates before proceeding ---
+Write-Host ""
+Write-Host "Current Full Access delegates on ${MailboxUPN}:" -ForegroundColor Cyan
+try {
+    $fullAccess = Get-MailboxPermission -Identity $MailboxUPN -ErrorAction Stop |
+        Where-Object {
+            $_.AccessRights -contains 'FullAccess' -and
+            -not $_.IsInherited -and
+            -not $_.Deny -and
+            $_.User -ne 'NT AUTHORITY\SELF'
+        } |
+        Select-Object @{n='Mailbox';e={$MailboxUPN}}, @{n='Delegate';e={$_.User}}, AccessRights |
+        Sort-Object Delegate
+
+    if ($fullAccess -and $fullAccess.Count -gt 0) {
+        $fullAccess | Format-Table -AutoSize
+    } else {
+        Write-Host "No explicit Full Access delegates found." -ForegroundColor Yellow
+    }
+}
+catch {
+    Write-Error "Could not read mailbox permissions for $MailboxUPN: $($_.Exception.Message)"
+}
+
+# Confirm proceed
+$confirm = Read-Host "Proceed to grant Send As to ${UserUPN} on ${MailboxUPN}? (Y/N)"
+if ($confirm -notin @('Y','y','Yes','yes')) { Write-Host "Aborted." -ForegroundColor Yellow; exit }
+
+# Check if Send As already exists
 $existing = Get-SendAsEntry -MailboxUPN $MailboxUPN -TrusteeIdentity $UserUPN
 if ($existing) {
     Write-Host "'Send As' already granted to $UserUPN on $MailboxUPN. No changes made." -ForegroundColor Yellow
@@ -141,7 +165,7 @@ if ($existing) {
 
 # Show current Send As permissions for the mailbox
 Write-Host ""
-Write-Host "Current Send As entries on $MailboxUPN:" -ForegroundColor Cyan
+Write-Host "Current Send As entries on ${MailboxUPN}:" -ForegroundColor Cyan
 try {
     Get-RecipientPermission -Identity $MailboxUPN -ErrorAction Stop |
         Where-Object { $_.AccessRights -contains 'SendAs' } |
