@@ -140,7 +140,7 @@ try {
     }
 }
 catch {
-    Write-Error "Could not read mailbox permissions for $MailboxUPN: $($_.Exception.Message)"
+    Write-Error "Could not read mailbox permissions for ${MailboxUPN}: $($_.Exception.Message)"
 }
 
 # Confirm proceed
@@ -174,8 +174,9 @@ try {
         Format-Table -AutoSize
 }
 catch {
-    Write-Error "Could not read recipient permissions for $MailboxUPN: $($_.Exception.Message)"
+    Write-Error "Could not read recipient permissions for ${MailboxUPN}: $($_.Exception.Message)"
 }
 
 Write-Host ""
 Write-Host "Done." -ForegroundColor Green
+
