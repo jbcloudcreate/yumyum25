@@ -1,0 +1,36 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/sp/v2/column-formatting.schema.json",
+  "elmType": "div",
+  "style": {
+    "display": "flex",
+    "align-items": "center",
+    "gap": "6px"
+  },
+  "children": [
+    {
+      "elmType": "span",
+      "txtContent": "@currentField",
+      "style": {
+        "font-size": "14px"
+      }
+    },
+    {
+      "elmType": "button",
+      "attributes": {
+        "iconName": "Copy",
+        "class": "ms-Button ms-Button--icon"
+      },
+      "style": {
+        "background-color": "transparent",
+        "border": "none",
+        "cursor": "pointer",
+        "padding": "4px",
+        "color": "#0078d4"
+      },
+      "customRowAction": {
+        "action": "copyToClipboard",
+        "clipboardText": "@currentField"
+      }
+    }
+  ]
+}
