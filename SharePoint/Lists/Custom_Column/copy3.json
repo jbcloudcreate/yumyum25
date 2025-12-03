@@ -1,0 +1,31 @@
+{
+  "$schema": "https://developer.microsoft.com/json-schemas/sp/v2/column-formatting.schema.json",
+  "elmType": "div",
+  "style": {
+    "display": "flex",
+    "align-items": "center",
+    "gap": "6px"
+  },
+  "children": [
+    {
+      "elmType": "span",
+      "txtContent": "@currentField",
+      "style": {
+        "font-size": "14px"
+      }
+    },
+    {
+      "elmType": "span",
+      "attributes": {
+        "iconName": "Copy",
+        "class": "ms-Button ms-Button--icon",
+        "title": "Click IP, then Ctrl+C to copy",
+        "aria-label": "Copy IP (manual)"
+      },
+      "style": {
+        "padding": "4px",
+        "color": "#0078d4"
+      }
+    }
+  ]
+}
