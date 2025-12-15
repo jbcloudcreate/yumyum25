@@ -21,6 +21,10 @@
     .\Invoke-MailboxDecommission.ps1 -DeactivatedOU "OU=Disabled,DC=contoso,DC=com"
 #>
 
+## Get-ADObject -Filter "Name -like '*HearingNotification*'" -Properties ObjectClass | Select-Object Name, ObjectClass, DistinguishedName
+
+## Get-ADUser -Filter "SAMAccountName -like '*HearingNotification*'" | Select-Object Name, SAMAccountName, DistinguishedName
+
 [CmdletBinding(SupportsShouldProcess)]
 param(
     [Parameter(Mandatory = $false)]
