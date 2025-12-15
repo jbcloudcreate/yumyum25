@@ -1,6 +1,6 @@
 <# 
 .SYNOPSIS
-    Grant "Full Access" (mailbox owner) permission in Exchange Online with friendly prompts.
+    Grant "Full Access" and "Send As" permissions in Exchange Online with friendly prompts.
 
 .DESCRIPTION
     - Prompts for mailbox and user identifiers.
@@ -8,8 +8,8 @@
     - Connects to EXO (installs module if missing).
     - Shows existing Full Access delegates BEFORE proceeding (sense check).
     - Validates objects exist.
-    - Skips if Full Access already present.
-    - Adds Full Access and shows final state.
+    - Skips if permissions already present.
+    - Adds Full Access and Send As, then shows final state.
 
 .NOTES
     Author: PowerShell Script
@@ -87,9 +87,38 @@ function Get-FullAccessEntry {
     }
 }
 
+function Get-SendAsEntry {
+    param(
+        [Parameter(Mandatory)][string]$MailboxUPN,
+        [Parameter(Mandatory)][string]$TrusteeIdentity
+    )
+
+    $trusteeObj = Get-Recipient -Identity $TrusteeIdentity -ErrorAction SilentlyContinue
+    $trusteeCandidates = @()
+    if ($trusteeObj) {
+        $trusteeCandidates += $trusteeObj.DisplayName
+        $trusteeCandidates += $trusteeObj.Name
+        $trusteeCandidates += $trusteeObj.Identity
+        if ($trusteeObj.PrimarySmtpAddress) { $trusteeCandidates += $trusteeObj.PrimarySmtpAddress.ToString() }
+        if ($trusteeObj.Alias) { $trusteeCandidates += $trusteeObj.Alias }
+    }
+    $trusteeCandidates = $trusteeCandidates | Where-Object { $_ } | Select-Object -Unique
+
+    $perms = Get-RecipientPermission -Identity $MailboxUPN -ErrorAction SilentlyContinue |
+             Where-Object { $_.AccessRights -contains 'SendAs' }
+
+    if (-not $perms) { return $null }
+
+    if ($trusteeCandidates.Count -gt 0) {
+        return $perms | Where-Object { $trusteeCandidates -contains $_.Trustee }
+    } else {
+        return $perms | Where-Object { $_.Trustee -eq $TrusteeIdentity }
+    }
+}
+
 # -------------------- MAIN --------------------
 
-Write-Host "`n=== Grant 'Full Access' Permission (Exchange Online) ===" -ForegroundColor Cyan
+Write-Host "`n=== Grant 'Full Access' + 'Send As' Permissions (Exchange Online) ===" -ForegroundColor Cyan
 Write-Host "Default domain for local-parts: $DefaultDomain" -ForegroundColor DarkCyan
 
 # Prompts
@@ -101,7 +130,7 @@ do {
 } while ([string]::IsNullOrWhiteSpace($mbxInput))
 
 do {
-    $userInput = Read-Host "Enter the user to grant Full Access (local-part or full UPN)"
+    $userInput = Read-Host "Enter the user to grant permissions (local-part or full UPN)"
     if ([string]::IsNullOrWhiteSpace($userInput)) {
         Write-Warning "User cannot be empty. Please try again."
     }
@@ -162,21 +191,23 @@ catch {
 }
 
 # Confirm proceed
-$confirm = Read-Host "Proceed to grant Full Access to ${UserUPN} on ${MailboxUPN}? (Y/N)"
+$confirm = Read-Host "Proceed to grant Full Access + Send As to ${UserUPN} on ${MailboxUPN}? (Y/N)"
 if ($confirm -notmatch '^[Yy]') { 
     Write-Host "Aborted." -ForegroundColor Yellow
     exit 0
 }
 
-# Check if Full Access already exists
-$existing = Get-FullAccessEntry -MailboxUPN $MailboxUPN -TrusteeIdentity $UserUPN
-if ($existing) {
-    Write-Host "`n'Full Access' already granted to $UserUPN on $MailboxUPN. No changes made." -ForegroundColor Yellow
+# ==================== FULL ACCESS ====================
+Write-Host "`n[ Full Access ]" -ForegroundColor Magenta
+
+$existingFullAccess = Get-FullAccessEntry -MailboxUPN $MailboxUPN -TrusteeIdentity $UserUPN
+if ($existingFullAccess) {
+    Write-Host "'Full Access' already granted to $UserUPN. Skipping." -ForegroundColor Yellow
 } else {
-    Write-Host "`nGranting 'Full Access' to $UserUPN on $MailboxUPN ..." -ForegroundColor Cyan
+    Write-Host "Granting 'Full Access' to $UserUPN ..." -ForegroundColor Cyan
     try {
         Add-MailboxPermission -Identity $MailboxUPN -User $UserUPN -AccessRights FullAccess -InheritanceType All -AutoMapping $true -ErrorAction Stop | Out-Null
-        Write-Host "Success" -ForegroundColor Green
+        Write-Host "[OK] Full Access granted" -ForegroundColor Green
     }
     catch {
         Write-Error "Failed to add Full Access permission: $($_.Exception.Message)"
@@ -184,9 +215,30 @@ if ($existing) {
     }
 }
 
-# Show current Full Access permissions for the mailbox
-Write-Host ""
-Write-Host "Current Full Access entries on ${MailboxUPN}:" -ForegroundColor Cyan
+# ==================== SEND AS ====================
+Write-Host "`n[ Send As ]" -ForegroundColor Magenta
+
+$existingSendAs = Get-SendAsEntry -MailboxUPN $MailboxUPN -TrusteeIdentity $UserUPN
+if ($existingSendAs) {
+    Write-Host "'Send As' already granted to $UserUPN. Skipping." -ForegroundColor Yellow
+} else {
+    Write-Host "Granting 'Send As' to $UserUPN ..." -ForegroundColor Cyan
+    try {
+        Add-RecipientPermission -Identity $MailboxUPN -Trustee $UserUPN -AccessRights SendAs -Confirm:$false -ErrorAction Stop | Out-Null
+        Write-Host "[OK] Send As granted" -ForegroundColor Green
+    }
+    catch {
+        Write-Error "Failed to add Send As permission: $($_.Exception.Message)"
+        exit 1
+    }
+}
+
+# ==================== FINAL STATE ====================
+Write-Host "`n========================================" -ForegroundColor Cyan
+Write-Host "Final Permissions on ${MailboxUPN}:" -ForegroundColor Cyan
+Write-Host "========================================" -ForegroundColor Cyan
+
+Write-Host "`nFull Access:" -ForegroundColor Yellow
 try {
     Get-MailboxPermission -Identity $MailboxUPN -ErrorAction Stop |
         Where-Object {
@@ -195,12 +247,27 @@ try {
             -not $_.Deny -and
             $_.User -ne 'NT AUTHORITY\SELF'
         } |
-        Select-Object @{n='Mailbox';e={$MailboxUPN}}, @{n='Delegate';e={$_.User}}, AccessRights |
+        Select-Object @{n='Delegate';e={$_.User}}, AccessRights |
         Sort-Object Delegate |
         Format-Table -AutoSize
 }
 catch {
-    Write-Error "Could not read mailbox permissions for ${MailboxUPN}: $($_.Exception.Message)"
+    Write-Error "Could not read mailbox permissions: $($_.Exception.Message)"
+}
+
+Write-Host "Send As:" -ForegroundColor Yellow
+try {
+    Get-RecipientPermission -Identity $MailboxUPN -ErrorAction Stop |
+        Where-Object { 
+            $_.AccessRights -contains 'SendAs' -and
+            $_.Trustee -ne 'NT AUTHORITY\SELF'
+        } |
+        Select-Object @{n='Trustee';e={$_.Trustee}}, AccessRights |
+        Sort-Object Trustee |
+        Format-Table -AutoSize
+}
+catch {
+    Write-Error "Could not read recipient permissions: $($_.Exception.Message)"
 }
 
 # Ask if user wants to process another
