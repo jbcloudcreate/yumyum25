@@ -6,42 +6,18 @@
     This script performs the AD-side tasks for mailbox decommissioning:
     - Prompts for user identity and helpdesk reference
     - Moves user to the specified Deactivated OU
-    - Appends "(Deactivated)" to the display name
+    - Appends "(Deactivated)" to the display name and CN (name shown in OU)
     - Updates telephone notes (info attribute) with deactivation details
-
-.PARAMETER DeactivatedOU
-    The distinguished name of the Deactivated OU. 
-    Defaults to a placeholder - update for your environment.
 
 .EXAMPLE
     .\Invoke-MailboxDecommission.ps1
-    (Will prompt for AD account and helpdesk reference)
-
-.EXAMPLE
-    .\Invoke-MailboxDecommission.ps1 -DeactivatedOU "OU=Disabled,DC=contoso,DC=com"
 #>
 
-## Get-ADObject -Filter "Name -like '*HearingNotification*'" -Properties ObjectClass | Select-Object Name, ObjectClass, DistinguishedName
-
-## Get-ADUser -Filter "SAMAccountName -like '*HearingNotification*'" | Select-Object Name, SAMAccountName, DistinguishedName
-
-## # Search the Mailboxes OU for any object matching the name
-# Get-ADObject -Filter "Name -like '*HearingNotification*'" -SearchBase "OU=Mailboxes,OU=Groups,OU=AzureAD,DC=xxx,DC=xxx,DC=int" -Properties ObjectClass, DisplayName, mail | Select-Object Name, ObjectClass, DisplayName, mail, DistinguishedName
-
-# Get-ADObject -Filter * -SearchBase "OU=Mailboxes,OU=Groups,OU=AzureAD,DC=xxx,DC=xxx,DC=int" -Properties ObjectClass | Select-Object Name, ObjectClass | Format-Table -AutoSize
-
-# Find the Mailboxes OU anywhere in your domain
-# Get-ADOrganizationalUnit -Filter "Name -eq 'Mailboxes'" | Select-Object Name, DistinguishedName
-
-# Search entire domain for the object
-#Get-ADObject -Filter "Name -like '*HearingNotification*'" | Select-Object Name, ObjectClass, DistinguishedName
-
-
-[CmdletBinding(SupportsShouldProcess)]
-param(
-    [Parameter(Mandatory = $false)]
-    [string]$DeactivatedOU = "OU=Deactivated Users,OU=Users,DC=yourdomain,DC=com"
-)
+#-----------------------------------------
+# CONFIGURATION - UPDATE THIS PATH
+#-----------------------------------------
+$DeactivatedOU = "OU=Deactivated Users,OU=Users,DC=yourdomain,DC=int"
+#-----------------------------------------
 
 # Import AD module if not already loaded
 if (-not (Get-Module -Name ActiveDirectory)) {
@@ -84,7 +60,7 @@ Write-Host "----------------------------------------" -ForegroundColor Gray
 
 try {
     # Get the user object
-    $User = Get-ADUser -Identity $Identity -Properties DisplayName, info, DistinguishedName -ErrorAction Stop
+    $User = Get-ADUser -Identity $Identity -Properties DisplayName, Name, info, DistinguishedName -ErrorAction Stop
     
     Write-Host "`nFound user: $($User.DisplayName) ($($User.SamAccountName))" -ForegroundColor Green
     Write-Host "Current OU: $($User.DistinguishedName -replace '^CN=[^,]+,')" -ForegroundColor Gray
@@ -120,6 +96,16 @@ try {
         Write-Warning "Display name already contains (Deactivated)"
     }
 
+    # Prepare the new CN (Name shown in OU list)
+    $CurrentName = $User.Name
+    if ($CurrentName -notlike "*(Deactivated)*") {
+        $NewName = "$CurrentName (Deactivated)"
+    }
+    else {
+        $NewName = $CurrentName
+        Write-Warning "Name already contains (Deactivated)"
+    }
+
     # Prepare the telephone notes (info attribute) update
     $NoteEntry = "Deactivated: $DeactivationDate | Ref: $HelpdeskReference | By: $RunningUser"
     
@@ -133,7 +119,7 @@ try {
     # Display planned changes
     Write-Host "`nApplying Changes..." -ForegroundColor Yellow
 
-    # Update AD attributes
+    # Update AD attributes (DisplayName and info)
     Set-ADUser -Identity $User.DistinguishedName -Replace @{
         DisplayName = $NewDisplayName
         info        = $NewInfo
@@ -142,25 +128,23 @@ try {
     Write-Host "[OK] Updated display name: '$NewDisplayName'" -ForegroundColor Green
     Write-Host "[OK] Updated telephone notes" -ForegroundColor Green
 
+    # Rename the object (CN) if not already deactivated
+    if ($CurrentName -notlike "*(Deactivated)*") {
+        Rename-ADObject -Identity $User.DistinguishedName -NewName $NewName -ErrorAction Stop
+        Write-Host "[OK] Updated name (CN): '$NewName'" -ForegroundColor Green
+        
+        # Update the DN for the move operation (CN has changed)
+        $UpdatedDN = "CN=$NewName,$($User.DistinguishedName -replace '^CN=[^,]+,')"
+    }
+    else {
+        $UpdatedDN = $User.DistinguishedName
+    }
+
     if (-not $AlreadyDeactivated) {
         # Move user to deactivated OU
-        Move-ADObject -Identity $User.DistinguishedName -TargetPath $DeactivatedOU -ErrorAction Stop
+        Move-ADObject -Identity $UpdatedDN -TargetPath $DeactivatedOU -ErrorAction Stop
         Write-Host "[OK] Moved user to Deactivated OU" -ForegroundColor Green
     }
-
-    # Create result object
-    $Result = [PSCustomObject]@{
-        SamAccountName    = $User.SamAccountName
-        DisplayName       = $NewDisplayName
-        HelpdeskRef       = $HelpdeskReference
-        DeactivatedBy     = $RunningUser
-        DeactivatedDate   = $DeactivationDate
-        Status            = "Success"
-    }
-
-    # Log to CSV for audit trail
-    $LogPath = Join-Path $PSScriptRoot "DecommissionLog_$(Get-Date -Format 'yyyyMMdd').csv"
-    $Result | Export-Csv -Path $LogPath -NoTypeInformation -Append
 
     Write-Host "`n========================================" -ForegroundColor Green
     Write-Host "  DECOMMISSION COMPLETE" -ForegroundColor Green
@@ -169,7 +153,6 @@ try {
     Write-Host "Helpdesk Ref: $HelpdeskReference"
     Write-Host "Processed By: $RunningUser"
     Write-Host "Date/Time:    $DeactivationDate"
-    Write-Host "Log File:     $LogPath"
     Write-Host "========================================`n" -ForegroundColor Green
 
 }
@@ -184,5 +167,5 @@ catch {
 # Ask if user wants to process another
 $Another = Read-Host "Process another user? (Y/N)"
 if ($Another -match '^[Yy]') {
-    & $PSCommandPath -DeactivatedOU $DeactivatedOU
+    & $PSCommandPath
 }
