@@ -7,7 +7,7 @@
     - Prompts for user identity and helpdesk reference
     - Moves user to the specified Deactivated OU
     - Appends "(Deactivated)" to the display name
-    - Updates telephoneNotes with deactivation details
+    - Updates telephone notes (info attribute) with deactivation details
 
 .PARAMETER DeactivatedOU
     The distinguished name of the Deactivated OU. 
@@ -68,7 +68,7 @@ Write-Host "----------------------------------------" -ForegroundColor Gray
 
 try {
     # Get the user object
-    $User = Get-ADUser -Identity $Identity -Properties DisplayName, telephoneNotes, DistinguishedName -ErrorAction Stop
+    $User = Get-ADUser -Identity $Identity -Properties DisplayName, info, DistinguishedName -ErrorAction Stop
     
     Write-Host "`nFound user: $($User.DisplayName) ($($User.SamAccountName))" -ForegroundColor Green
     Write-Host "Current OU: $($User.DistinguishedName -replace '^CN=[^,]+,')" -ForegroundColor Gray
@@ -104,14 +104,14 @@ try {
         Write-Warning "Display name already contains (Deactivated)"
     }
 
-    # Prepare the telephone notes update
+    # Prepare the telephone notes (info attribute) update
     $NoteEntry = "Deactivated: $DeactivationDate | Ref: $HelpdeskReference | By: $RunningUser"
     
-    if ([string]::IsNullOrWhiteSpace($User.telephoneNotes)) {
-        $NewTelephoneNotes = $NoteEntry
+    if ([string]::IsNullOrWhiteSpace($User.info)) {
+        $NewInfo = $NoteEntry
     }
     else {
-        $NewTelephoneNotes = "$($User.telephoneNotes)`r`n$NoteEntry"
+        $NewInfo = "$($User.info)`r`n$NoteEntry"
     }
 
     # Display planned changes
@@ -119,8 +119,8 @@ try {
 
     # Update AD attributes
     Set-ADUser -Identity $User.DistinguishedName -Replace @{
-        DisplayName     = $NewDisplayName
-        telephoneNotes  = $NewTelephoneNotes
+        DisplayName = $NewDisplayName
+        info        = $NewInfo
     } -ErrorAction Stop
     
     Write-Host "[OK] Updated display name: '$NewDisplayName'" -ForegroundColor Green
