@@ -30,6 +30,11 @@
 
 # Get-ADObject -Filter * -SearchBase "OU=Mailboxes,OU=Groups,OU=AzureAD,DC=xxx,DC=xxx,DC=int" -Properties ObjectClass | Select-Object Name, ObjectClass | Format-Table -AutoSize
 
+# Find the Mailboxes OU anywhere in your domain
+# Get-ADOrganizationalUnit -Filter "Name -eq 'Mailboxes'" | Select-Object Name, DistinguishedName
+
+# Search entire domain for the object
+#Get-ADObject -Filter "Name -like '*HearingNotification*'" | Select-Object Name, ObjectClass, DistinguishedName
 
 
 [CmdletBinding(SupportsShouldProcess)]
