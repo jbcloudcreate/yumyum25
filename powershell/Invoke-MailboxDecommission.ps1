@@ -25,6 +25,13 @@
 
 ## Get-ADUser -Filter "SAMAccountName -like '*HearingNotification*'" | Select-Object Name, SAMAccountName, DistinguishedName
 
+## # Search the Mailboxes OU for any object matching the name
+# Get-ADObject -Filter "Name -like '*HearingNotification*'" -SearchBase "OU=Mailboxes,OU=Groups,OU=AzureAD,DC=xxx,DC=xxx,DC=int" -Properties ObjectClass, DisplayName, mail | Select-Object Name, ObjectClass, DisplayName, mail, DistinguishedName
+
+# Get-ADObject -Filter * -SearchBase "OU=Mailboxes,OU=Groups,OU=AzureAD,DC=xxx,DC=xxx,DC=int" -Properties ObjectClass | Select-Object Name, ObjectClass | Format-Table -AutoSize
+
+
+
 [CmdletBinding(SupportsShouldProcess)]
 param(
     [Parameter(Mandatory = $false)]
