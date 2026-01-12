@@ -102,16 +102,33 @@ $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
 
 Write-Host "`nRetrieving User and Shared mailboxes..." -ForegroundColor Cyan
 
-# Get all mailboxes with required properties including LastName for filtering
-$allMailboxes = Get-EXOMailbox -RecipientTypeDetails UserMailbox, SharedMailbox -ResultSize Unlimited -Properties ProhibitSendReceiveQuota, DisplayName, UserPrincipalName, RecipientTypeDetails, LastName
+# Get all mailboxes with required properties (without LastName - not supported by Get-EXOMailbox)
+$allMailboxes = Get-EXOMailbox -RecipientTypeDetails UserMailbox, SharedMailbox -ResultSize Unlimited -Properties ProhibitSendReceiveQuota, DisplayName, UserPrincipalName, RecipientTypeDetails
+
+Write-Host "Found $($allMailboxes.Count) mailboxes." -ForegroundColor Green
+Write-Host "Retrieving user details for surname information..." -ForegroundColor Cyan
+
+# Get all users to retrieve LastName - this is part of Exchange Online Management module
+$allUsers = Get-User -ResultSize Unlimited | Select-Object UserPrincipalName, LastName, FirstName
+
+# Create a lookup hashtable for fast surname retrieval
+$userLookup = @{}
+foreach ($user in $allUsers) {
+    if ($user.UserPrincipalName) {
+        $userLookup[$user.UserPrincipalName.ToLower()] = $user
+    }
+}
+
+Write-Host "Retrieved details for $($allUsers.Count) users." -ForegroundColor Green
 
 # Show distribution and exit if requested
 if ($ShowDistribution) {
     Write-Host "`n--- Mailbox Distribution by Surname ---`n" -ForegroundColor Cyan
     
     $distribution = $allMailboxes | Group-Object { 
-        if ($_.LastName) { 
-            $_.LastName.Substring(0,1).ToUpper() 
+        $user = $userLookup[$_.UserPrincipalName.ToLower()]
+        if ($user -and $user.LastName) { 
+            $user.LastName.Substring(0,1).ToUpper() 
         } else { 
             '#' 
         } 
@@ -127,9 +144,15 @@ if ($ShowDistribution) {
     Write-Host "  -LetterRange 'Q-T'" -ForegroundColor Gray
     Write-Host "  -LetterRange 'U-Z'" -ForegroundColor Gray
     
+    $noSurnameCount = ($distribution | Where-Object { $_.Name -eq '#' }).Count
+    if ($noSurnameCount -gt 0) {
+        Write-Host "`nNote: '#' represents $noSurnameCount mailboxes with no surname set" -ForegroundColor Yellow
+    }
+    
     Write-Host "`nTotal mailboxes: $($allMailboxes.Count)" -ForegroundColor Cyan
     
     $stopwatch.Stop()
+    Write-Host "Execution time: $([math]::Round($stopwatch.Elapsed.TotalSeconds, 2)) seconds" -ForegroundColor Green
     return
 }
 
@@ -145,8 +168,9 @@ if ($LetterRange) {
     Write-Host "Filtering mailboxes with surnames starting: $($letters -join ', ')" -ForegroundColor Yellow
     
     $mailboxes = $allMailboxes | Where-Object {
-        if ($_.LastName) {
-            $firstLetter = $_.LastName.Substring(0,1).ToUpper()
+        $user = $userLookup[$_.UserPrincipalName.ToLower()]
+        if ($user -and $user.LastName) {
+            $firstLetter = $user.LastName.Substring(0,1).ToUpper()
             $letters -contains $firstLetter
         }
         else {
@@ -214,13 +238,17 @@ foreach ($mailbox in $mailboxes) {
         Write-Progress -Activity "Processing Results" -Status "$processedCount of $totalCount" -PercentComplete (($processedCount / $totalCount) * 100)
     }
 
+    # Get user details from lookup
+    $user = $userLookup[$mailbox.UserPrincipalName.ToLower()]
+    $lastName = if ($user) { $user.LastName } else { $null }
+
     $stats = $allStats[$mailbox.ExchangeGuid.ToString()]
 
     if ($null -eq $stats -or $null -eq $stats.TotalItemSize) {
         $skippedMailboxes.Add([PSCustomObject]@{
             DisplayName       = $mailbox.DisplayName
             UserPrincipalName = $mailbox.UserPrincipalName
-            LastName          = $mailbox.LastName
+            LastName          = $lastName
             Reason            = "No mailbox statistics available"
         })
         continue
@@ -243,7 +271,7 @@ foreach ($mailbox in $mailboxes) {
             $results.Add([PSCustomObject]@{
                 DisplayName       = $mailbox.DisplayName
                 UserPrincipalName = $mailbox.UserPrincipalName
-                LastName          = $mailbox.LastName
+                LastName          = $lastName
                 RecipientType     = $mailbox.RecipientTypeDetails
                 CurrentSizeGB     = [math]::Round(($sizeBytes / 1GB), 2)
                 QuotaGB           = "Unlimited"
@@ -279,7 +307,7 @@ foreach ($mailbox in $mailboxes) {
         $skippedMailboxes.Add([PSCustomObject]@{
             DisplayName       = $mailbox.DisplayName
             UserPrincipalName = $mailbox.UserPrincipalName
-            LastName          = $mailbox.LastName
+            LastName          = $lastName
             Reason            = "Unable to determine quota"
         })
         continue
@@ -291,7 +319,7 @@ foreach ($mailbox in $mailboxes) {
         $results.Add([PSCustomObject]@{
             DisplayName       = $mailbox.DisplayName
             UserPrincipalName = $mailbox.UserPrincipalName
-            LastName          = $mailbox.LastName
+            LastName          = $lastName
             RecipientType     = $mailbox.RecipientTypeDetails
             CurrentSizeGB     = [math]::Round(($currentSizeBytes / 1GB), 2)
             QuotaGB           = [math]::Round(($quotaBytes / 1GB), 2)
