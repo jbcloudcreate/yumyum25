@@ -8,6 +8,7 @@
     This script connects to Exchange Online and identifies mailboxes that are using
     more than the specified percentage of their assigned quota (ProhibitSendReceiveQuota).
     Supports alphabetical batching by surname for large environments.
+    Assumes you are already connected to Exchange Online.
 
 .PARAMETER ThresholdPercent
     The percentage threshold for mailbox usage. Default is 75.
@@ -81,34 +82,17 @@ function Get-LettersInRange {
     return @()
 }
 
-# Check if already connected to Exchange Online
-try {
-    $null = Get-OrganizationConfig -ErrorAction Stop
-    Write-Host "Already connected to Exchange Online." -ForegroundColor Green
-}
-catch {
-    Write-Host "Connecting to Exchange Online..." -ForegroundColor Yellow
-    try {
-        Connect-ExchangeOnline -ShowBanner:$false
-        Write-Host "Successfully connected to Exchange Online." -ForegroundColor Green
-    }
-    catch {
-        Write-Error "Failed to connect to Exchange Online: $_"
-        exit 1
-    }
-}
-
 $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
 
 Write-Host "`nRetrieving User and Shared mailboxes..." -ForegroundColor Cyan
 
-# Get all mailboxes with required properties (without LastName - not supported by Get-EXOMailbox)
+# Get all mailboxes with required properties
 $allMailboxes = Get-EXOMailbox -RecipientTypeDetails UserMailbox, SharedMailbox -ResultSize Unlimited -Properties ProhibitSendReceiveQuota, DisplayName, UserPrincipalName, RecipientTypeDetails
 
 Write-Host "Found $($allMailboxes.Count) mailboxes." -ForegroundColor Green
 Write-Host "Retrieving user details for surname information..." -ForegroundColor Cyan
 
-# Get all users to retrieve LastName - this is part of Exchange Online Management module
+# Get all users to retrieve LastName
 $allUsers = Get-User -ResultSize Unlimited | Select-Object UserPrincipalName, LastName, FirstName
 
 # Create a lookup hashtable for fast surname retrieval
@@ -333,26 +317,6 @@ Write-Progress -Activity "Processing Results" -Completed
 
 $stopwatch.Stop()
 
-# Display results
-$rangeLabel = if ($LetterRange) { " (Surnames: $LetterRange)" } else { "" }
-
-if ($results.Count -eq 0) {
-    Write-Host "`nNo mailboxes found exceeding the $ThresholdPercent% threshold$rangeLabel." -ForegroundColor Green
-}
-else {
-    Write-Host "`n========================================" -ForegroundColor Cyan
-    Write-Host " Mailboxes at or above $ThresholdPercent% usage$rangeLabel" -ForegroundColor Cyan
-    Write-Host " Total found: $($results.Count)" -ForegroundColor Cyan
-    Write-Host "========================================`n" -ForegroundColor Cyan
-
-    $results | Sort-Object { if ($_.UsagePercent -eq "N/A") { -1 } else { $_.UsagePercent } } -Descending |
-        Format-Table -Property DisplayName, LastName, UserPrincipalName, RecipientType, CurrentSizeGB, QuotaGB, UsagePercent, ItemCount -AutoSize
-}
-
-if ($skippedMailboxes.Count -gt 0) {
-    Write-Host "`nSkipped $($skippedMailboxes.Count) mailboxes (no statistics available)" -ForegroundColor Yellow
-}
-
 # Summary
 Write-Host "`n--- Summary ---" -ForegroundColor Cyan
 if ($LetterRange) {
@@ -375,4 +339,3 @@ $global:MailboxResults = $results
 $global:SkippedMailboxes = $skippedMailboxes
 
 Write-Host "`nResults stored in `$MailboxResults variable." -ForegroundColor Gray
-Write-Host "Export with: `$MailboxResults | Export-Csv -Path 'Mailboxes_$($LetterRange -replace '-','to').csv' -NoTypeInformation" -ForegroundColor Gray
