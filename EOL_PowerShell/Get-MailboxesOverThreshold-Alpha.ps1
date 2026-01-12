@@ -18,6 +18,9 @@
     Can also use single letters like "A" or "S".
     If not specified, processes all mailboxes.
 
+.PARAMETER NoSurname
+    Filter mailboxes that have no surname set (typically shared mailboxes).
+
 .PARAMETER IncludeUnlimited
     If specified, includes mailboxes with unlimited quotas (they will show N/A usage).
 
@@ -31,7 +34,7 @@
     .\Get-MailboxesOverThreshold.ps1 -ThresholdPercent 75 -LetterRange "A-F"
 
 .EXAMPLE
-    .\Get-MailboxesOverThreshold.ps1 -ThresholdPercent 80 -LetterRange "G-K"
+    .\Get-MailboxesOverThreshold.ps1 -ThresholdPercent 80 -NoSurname
 
 .EXAMPLE
     .\Get-MailboxesOverThreshold.ps1 -ShowDistribution
@@ -46,6 +49,9 @@ param (
     [Parameter()]
     [ValidatePattern('^[A-Za-z](-[A-Za-z])?$')]
     [string]$LetterRange,
+
+    [Parameter()]
+    [switch]$NoSurname,
 
     [Parameter()]
     [switch]$IncludeUnlimited,
@@ -80,6 +86,43 @@ function Get-LettersInRange {
     }
     
     return @()
+}
+
+function Get-BytesFromValue {
+    param ($Value)
+    
+    if ($null -eq $Value) {
+        return 0
+    }
+    
+    if ($Value -is [string]) {
+        if ($Value -match '\(([0-9,]+) bytes\)') {
+            return [long]($matches[1] -replace ',', '')
+        }
+        return 0
+    }
+    
+    if ($Value.PSObject.Properties['Value'] -and $null -ne $Value.Value) {
+        try {
+            return $Value.Value.ToBytes()
+        }
+        catch {
+            return 0
+        }
+    }
+    
+    try {
+        return $Value.ToBytes()
+    }
+    catch {
+        return 0
+    }
+}
+
+# Check for conflicting parameters
+if ($LetterRange -and $NoSurname) {
+    Write-Error "Cannot use both -LetterRange and -NoSurname parameters together."
+    exit 1
 }
 
 $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
@@ -127,10 +170,12 @@ if ($ShowDistribution) {
     Write-Host "  -LetterRange 'M-P'" -ForegroundColor Gray
     Write-Host "  -LetterRange 'Q-T'" -ForegroundColor Gray
     Write-Host "  -LetterRange 'U-Z'" -ForegroundColor Gray
+    Write-Host "  -NoSurname (for '#' entries)" -ForegroundColor Gray
     
     $noSurnameCount = ($distribution | Where-Object { $_.Name -eq '#' }).Count
     if ($noSurnameCount -gt 0) {
-        Write-Host "`nNote: '#' represents $noSurnameCount mailboxes with no surname set" -ForegroundColor Yellow
+        Write-Host "`nNote: '#' represents $noSurnameCount mailboxes with no surname set (typically shared mailboxes)" -ForegroundColor Yellow
+        Write-Host "Use -NoSurname parameter to process these" -ForegroundColor Yellow
     }
     
     Write-Host "`nTotal mailboxes: $($allMailboxes.Count)" -ForegroundColor Cyan
@@ -140,8 +185,18 @@ if ($ShowDistribution) {
     return
 }
 
-# Filter by letter range if specified
-if ($LetterRange) {
+# Filter by letter range or no surname
+if ($NoSurname) {
+    Write-Host "Filtering mailboxes with no surname set..." -ForegroundColor Yellow
+    
+    $mailboxes = $allMailboxes | Where-Object {
+        $user = $userLookup[$_.UserPrincipalName.ToLower()]
+        -not ($user -and $user.LastName)
+    }
+    
+    Write-Host "Filtered to $($mailboxes.Count) mailboxes with no surname (from $($allMailboxes.Count) total)" -ForegroundColor Yellow
+}
+elseif ($LetterRange) {
     $letters = Get-LettersInRange -Range $LetterRange
     
     if ($letters.Count -eq 0) {
@@ -166,7 +221,7 @@ if ($LetterRange) {
 }
 else {
     $mailboxes = $allMailboxes
-    Write-Host "Processing ALL mailboxes. Consider using -LetterRange to batch." -ForegroundColor Yellow
+    Write-Host "Processing ALL mailboxes. Consider using -LetterRange or -NoSurname to batch." -ForegroundColor Yellow
     Write-Host "Use -ShowDistribution to see mailbox counts by surname letter.`n" -ForegroundColor Gray
 }
 
@@ -240,17 +295,21 @@ foreach ($mailbox in $mailboxes) {
 
     $quotaValue = $mailbox.ProhibitSendReceiveQuota
 
-    if ($null -eq $quotaValue -or $quotaValue.IsUnlimited) {
+    # Check if quota is unlimited
+    $isUnlimited = $false
+    if ($null -eq $quotaValue) {
+        $isUnlimited = $true
+    }
+    elseif ($quotaValue.PSObject.Properties['IsUnlimited'] -and $quotaValue.IsUnlimited) {
+        $isUnlimited = $true
+    }
+    elseif ($quotaValue -is [string] -and $quotaValue -match 'unlimited') {
+        $isUnlimited = $true
+    }
+
+    if ($isUnlimited) {
         if ($IncludeUnlimited) {
-            $sizeBytes = 0
-            if ($stats.TotalItemSize -is [string]) {
-                if ($stats.TotalItemSize -match '\(([0-9,]+) bytes\)') {
-                    $sizeBytes = [long]($matches[1] -replace ',', '')
-                }
-            }
-            else {
-                try { $sizeBytes = $stats.TotalItemSize.Value.ToBytes() } catch { $sizeBytes = 0 }
-            }
+            $sizeBytes = Get-BytesFromValue -Value $stats.TotalItemSize
             
             $results.Add([PSCustomObject]@{
                 DisplayName       = $mailbox.DisplayName
@@ -266,26 +325,9 @@ foreach ($mailbox in $mailboxes) {
         continue
     }
 
-    $currentSizeBytes = 0
-    $quotaBytes = 0
-
-    if ($stats.TotalItemSize -is [string]) {
-        if ($stats.TotalItemSize -match '\(([0-9,]+) bytes\)') {
-            $currentSizeBytes = [long]($matches[1] -replace ',', '')
-        }
-    }
-    else {
-        try { $currentSizeBytes = $stats.TotalItemSize.Value.ToBytes() } catch { $currentSizeBytes = 0 }
-    }
-
-    if ($quotaValue -is [string]) {
-        if ($quotaValue -match '\(([0-9,]+) bytes\)') {
-            $quotaBytes = [long]($matches[1] -replace ',', '')
-        }
-    }
-    else {
-        try { $quotaBytes = $quotaValue.Value.ToBytes() } catch { $quotaBytes = 0 }
-    }
+    # Get sizes using helper function
+    $currentSizeBytes = Get-BytesFromValue -Value $stats.TotalItemSize
+    $quotaBytes = Get-BytesFromValue -Value $quotaValue
 
     if ($quotaBytes -eq 0) {
         $skippedMailboxes.Add([PSCustomObject]@{
@@ -321,6 +363,9 @@ $stopwatch.Stop()
 Write-Host "`n--- Summary ---" -ForegroundColor Cyan
 if ($LetterRange) {
     Write-Host "Letter range: $LetterRange" -ForegroundColor Yellow
+}
+if ($NoSurname) {
+    Write-Host "Filter: Mailboxes with no surname" -ForegroundColor Yellow
 }
 Write-Host "Mailboxes scanned: $totalCount"
 Write-Host "Mailboxes at or above $ThresholdPercent% threshold: $($results.Count)"
