@@ -102,14 +102,12 @@ function Get-BytesFromValue {
         return 0
     }
     
-    if ($Value.PSObject.Properties['Value'] -and $null -ne $Value.Value) {
-        try {
+    try {
+        if ($null -ne $Value.Value) {
             return $Value.Value.ToBytes()
         }
-        catch {
-            return 0
-        }
     }
+    catch {}
     
     try {
         return $Value.ToBytes()
@@ -117,6 +115,23 @@ function Get-BytesFromValue {
     catch {
         return 0
     }
+}
+
+function Get-SafeItemCount {
+    param ($Stats)
+    
+    if ($null -eq $Stats) {
+        return 0
+    }
+    
+    try {
+        if ($null -ne $Stats.ItemCount) {
+            return $Stats.ItemCount
+        }
+    }
+    catch {}
+    
+    return 0
 }
 
 # Check for conflicting parameters
@@ -153,12 +168,17 @@ if ($ShowDistribution) {
     Write-Host "`n--- Mailbox Distribution by Surname ---`n" -ForegroundColor Cyan
     
     $distribution = $allMailboxes | Group-Object { 
-        $user = $userLookup[$_.UserPrincipalName.ToLower()]
-        if ($user -and $user.LastName) { 
-            $user.LastName.Substring(0,1).ToUpper() 
-        } else { 
-            '#' 
-        } 
+        $upn = $_.UserPrincipalName
+        if ($upn) {
+            $user = $userLookup[$upn.ToLower()]
+            if ($user -and $user.LastName) { 
+                $user.LastName.Substring(0,1).ToUpper() 
+            } else { 
+                '#' 
+            }
+        } else {
+            '#'
+        }
     } | Sort-Object Name
     
     $distribution | Format-Table @{L='Letter';E={$_.Name}}, @{L='Count';E={$_.Count}}, @{L='Percentage';E={'{0:P1}' -f ($_.Count / $allMailboxes.Count)}} -AutoSize
@@ -172,7 +192,8 @@ if ($ShowDistribution) {
     Write-Host "  -LetterRange 'U-Z'" -ForegroundColor Gray
     Write-Host "  -NoSurname (for '#' entries)" -ForegroundColor Gray
     
-    $noSurnameCount = ($distribution | Where-Object { $_.Name -eq '#' }).Count
+    $noSurnameGroup = $distribution | Where-Object { $_.Name -eq '#' }
+    $noSurnameCount = if ($noSurnameGroup) { $noSurnameGroup.Count } else { 0 }
     if ($noSurnameCount -gt 0) {
         Write-Host "`nNote: '#' represents $noSurnameCount mailboxes with no surname set (typically shared mailboxes)" -ForegroundColor Yellow
         Write-Host "Use -NoSurname parameter to process these" -ForegroundColor Yellow
@@ -190,7 +211,9 @@ if ($NoSurname) {
     Write-Host "Filtering mailboxes with no surname set..." -ForegroundColor Yellow
     
     $mailboxes = $allMailboxes | Where-Object {
-        $user = $userLookup[$_.UserPrincipalName.ToLower()]
+        $upn = $_.UserPrincipalName
+        if (-not $upn) { return $true }
+        $user = $userLookup[$upn.ToLower()]
         -not ($user -and $user.LastName)
     }
     
@@ -207,7 +230,9 @@ elseif ($LetterRange) {
     Write-Host "Filtering mailboxes with surnames starting: $($letters -join ', ')" -ForegroundColor Yellow
     
     $mailboxes = $allMailboxes | Where-Object {
-        $user = $userLookup[$_.UserPrincipalName.ToLower()]
+        $upn = $_.UserPrincipalName
+        if (-not $upn) { return $false }
+        $user = $userLookup[$upn.ToLower()]
         if ($user -and $user.LastName) {
             $firstLetter = $user.LastName.Substring(0,1).ToUpper()
             $letters -contains $firstLetter
@@ -225,7 +250,7 @@ else {
     Write-Host "Use -ShowDistribution to see mailbox counts by surname letter.`n" -ForegroundColor Gray
 }
 
-$totalCount = $mailboxes.Count
+$totalCount = @($mailboxes).Count
 
 if ($totalCount -eq 0) {
     Write-Host "`nNo mailboxes found matching the criteria." -ForegroundColor Yellow
@@ -239,10 +264,12 @@ Write-Host "Processing $totalCount mailboxes...`n" -ForegroundColor Cyan
 Write-Host "Fetching mailbox statistics..." -ForegroundColor Yellow
 
 $allStats = @{}
+$mailboxArray = @($mailboxes)
 $batches = [System.Collections.Generic.List[object[]]]::new()
 
-for ($i = 0; $i -lt $mailboxes.Count; $i += $BatchSize) {
-    $batch = @($mailboxes[$i..([Math]::Min($i + $BatchSize - 1, $mailboxes.Count - 1))])
+for ($i = 0; $i -lt $mailboxArray.Count; $i += $BatchSize) {
+    $endIndex = [Math]::Min($i + $BatchSize - 1, $mailboxArray.Count - 1)
+    $batch = @($mailboxArray[$i..$endIndex])
     $batches.Add($batch)
 }
 
@@ -251,12 +278,17 @@ foreach ($batch in $batches) {
     $batchNum++
     Write-Progress -Activity "Fetching Mailbox Statistics" -Status "Batch $batchNum of $($batches.Count)" -PercentComplete (($batchNum / $batches.Count) * 100)
     
-    $batchStats = $batch | Get-EXOMailboxStatistics -Properties TotalItemSize, ItemCount -ErrorAction SilentlyContinue
-    
-    foreach ($stat in $batchStats) {
-        if ($stat.MailboxGuid) {
-            $allStats[$stat.MailboxGuid.ToString()] = $stat
+    try {
+        $batchStats = $batch | Get-EXOMailboxStatistics -Properties TotalItemSize, ItemCount -ErrorAction SilentlyContinue
+        
+        foreach ($stat in $batchStats) {
+            if ($null -ne $stat -and $null -ne $stat.MailboxGuid) {
+                $allStats[$stat.MailboxGuid.ToString()] = $stat
+            }
         }
+    }
+    catch {
+        Write-Warning "Error processing batch $batchNum : $_"
     }
 }
 
@@ -270,23 +302,38 @@ $processedCount = 0
 
 Write-Host "Processing and filtering results..." -ForegroundColor Cyan
 
-foreach ($mailbox in $mailboxes) {
+foreach ($mailbox in $mailboxArray) {
     $processedCount++
     
     if ($processedCount % 500 -eq 0) {
         Write-Progress -Activity "Processing Results" -Status "$processedCount of $totalCount" -PercentComplete (($processedCount / $totalCount) * 100)
     }
 
+    # Safely get mailbox properties
+    $displayName = if ($mailbox.DisplayName) { $mailbox.DisplayName } else { "Unknown" }
+    $upn = if ($mailbox.UserPrincipalName) { $mailbox.UserPrincipalName } else { "Unknown" }
+    $recipientType = if ($mailbox.RecipientTypeDetails) { $mailbox.RecipientTypeDetails } else { "Unknown" }
+    
     # Get user details from lookup
-    $user = $userLookup[$mailbox.UserPrincipalName.ToLower()]
-    $lastName = if ($user) { $user.LastName } else { $null }
+    $lastName = $null
+    if ($upn -ne "Unknown") {
+        $user = $userLookup[$upn.ToLower()]
+        if ($user) { $lastName = $user.LastName }
+    }
 
-    $stats = $allStats[$mailbox.ExchangeGuid.ToString()]
+    # Get stats from lookup
+    $stats = $null
+    if ($null -ne $mailbox.ExchangeGuid) {
+        $guidString = $mailbox.ExchangeGuid.ToString()
+        if ($allStats.ContainsKey($guidString)) {
+            $stats = $allStats[$guidString]
+        }
+    }
 
     if ($null -eq $stats -or $null -eq $stats.TotalItemSize) {
         $skippedMailboxes.Add([PSCustomObject]@{
-            DisplayName       = $mailbox.DisplayName
-            UserPrincipalName = $mailbox.UserPrincipalName
+            DisplayName       = $displayName
+            UserPrincipalName = $upn
             LastName          = $lastName
             Reason            = "No mailbox statistics available"
         })
@@ -300,26 +347,33 @@ foreach ($mailbox in $mailboxes) {
     if ($null -eq $quotaValue) {
         $isUnlimited = $true
     }
-    elseif ($quotaValue.PSObject.Properties['IsUnlimited'] -and $quotaValue.IsUnlimited) {
-        $isUnlimited = $true
-    }
-    elseif ($quotaValue -is [string] -and $quotaValue -match 'unlimited') {
-        $isUnlimited = $true
+    else {
+        try {
+            if ($quotaValue.IsUnlimited -eq $true) {
+                $isUnlimited = $true
+            }
+        }
+        catch {}
+        
+        if (-not $isUnlimited -and $quotaValue -is [string] -and $quotaValue -match 'unlimited') {
+            $isUnlimited = $true
+        }
     }
 
     if ($isUnlimited) {
         if ($IncludeUnlimited) {
             $sizeBytes = Get-BytesFromValue -Value $stats.TotalItemSize
+            $itemCount = Get-SafeItemCount -Stats $stats
             
             $results.Add([PSCustomObject]@{
-                DisplayName       = $mailbox.DisplayName
-                UserPrincipalName = $mailbox.UserPrincipalName
+                DisplayName       = $displayName
+                UserPrincipalName = $upn
                 LastName          = $lastName
-                RecipientType     = $mailbox.RecipientTypeDetails
+                RecipientType     = $recipientType
                 CurrentSizeGB     = [math]::Round(($sizeBytes / 1GB), 2)
                 QuotaGB           = "Unlimited"
                 UsagePercent      = "N/A"
-                ItemCount         = $stats.ItemCount
+                ItemCount         = $itemCount
             })
         }
         continue
@@ -331,8 +385,8 @@ foreach ($mailbox in $mailboxes) {
 
     if ($quotaBytes -eq 0) {
         $skippedMailboxes.Add([PSCustomObject]@{
-            DisplayName       = $mailbox.DisplayName
-            UserPrincipalName = $mailbox.UserPrincipalName
+            DisplayName       = $displayName
+            UserPrincipalName = $upn
             LastName          = $lastName
             Reason            = "Unable to determine quota"
         })
@@ -342,15 +396,17 @@ foreach ($mailbox in $mailboxes) {
     $usagePercent = [math]::Round(($currentSizeBytes / $quotaBytes) * 100, 2)
 
     if ($usagePercent -ge $ThresholdPercent) {
+        $itemCount = Get-SafeItemCount -Stats $stats
+        
         $results.Add([PSCustomObject]@{
-            DisplayName       = $mailbox.DisplayName
-            UserPrincipalName = $mailbox.UserPrincipalName
+            DisplayName       = $displayName
+            UserPrincipalName = $upn
             LastName          = $lastName
-            RecipientType     = $mailbox.RecipientTypeDetails
+            RecipientType     = $recipientType
             CurrentSizeGB     = [math]::Round(($currentSizeBytes / 1GB), 2)
             QuotaGB           = [math]::Round(($quotaBytes / 1GB), 2)
             UsagePercent      = $usagePercent
-            ItemCount         = $stats.ItemCount
+            ItemCount         = $itemCount
         })
     }
 }
@@ -358,6 +414,7 @@ foreach ($mailbox in $mailboxes) {
 Write-Progress -Activity "Processing Results" -Completed
 
 $stopwatch.Stop()
+$elapsedMinutes = [math]::Round($stopwatch.Elapsed.TotalMinutes, 2)
 
 # Summary
 Write-Host "`n--- Summary ---" -ForegroundColor Cyan
@@ -370,11 +427,11 @@ if ($NoSurname) {
 Write-Host "Mailboxes scanned: $totalCount"
 Write-Host "Mailboxes at or above $ThresholdPercent% threshold: $($results.Count)"
 Write-Host "Mailboxes skipped: $($skippedMailboxes.Count)"
-Write-Host "Execution time: $([math]::Round($stopwatch.Elapsed.TotalMinutes, 2)) minutes" -ForegroundColor Green
+Write-Host "Execution time: $elapsedMinutes minutes" -ForegroundColor Green
 
 if ($results.Count -gt 0) {
-    $userCount = ($results | Where-Object { $_.RecipientType -eq 'UserMailbox' }).Count
-    $sharedCount = ($results | Where-Object { $_.RecipientType -eq 'SharedMailbox' }).Count
+    $userCount = @($results | Where-Object { $_.RecipientType -eq 'UserMailbox' }).Count
+    $sharedCount = @($results | Where-Object { $_.RecipientType -eq 'SharedMailbox' }).Count
     Write-Host "  - User Mailboxes: $userCount"
     Write-Host "  - Shared Mailboxes: $sharedCount"
 }
