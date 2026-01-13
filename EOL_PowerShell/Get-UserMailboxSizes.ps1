@@ -1,5 +1,12 @@
+# Test user - set to $null to process all A-F, or specify a UPN for testing
+$TestUser = "Dawn.Edwards@south-wales.police.uk"
+
 # Get user mailboxes with quota info
-$mailboxes = Get-EXOMailbox -RecipientTypeDetails UserMailbox -ResultSize Unlimited -Properties ProhibitSendReceiveQuota, DisplayName, UserPrincipalName
+if ($TestUser) {
+    $mailboxes = Get-EXOMailbox -Identity $TestUser -Properties ProhibitSendReceiveQuota, DisplayName, UserPrincipalName
+} else {
+    $mailboxes = Get-EXOMailbox -RecipientTypeDetails UserMailbox -ResultSize Unlimited -Properties ProhibitSendReceiveQuota, DisplayName, UserPrincipalName
+}
 
 # Get user details for names
 $users = Get-User -ResultSize Unlimited | Select-Object UserPrincipalName, FirstName, LastName
@@ -16,21 +23,42 @@ foreach ($user in $users) {
 $results = foreach ($mailbox in $mailboxes) {
     $user = $userLookup[$mailbox.UserPrincipalName.ToLower()]
     
-    # Skip if no surname or not A-F
+    # Skip if no surname or not A-F (skip filter if testing single user)
     if (-not $user -or -not $user.LastName) { continue }
-    $firstLetter = $user.LastName.Substring(0,1).ToUpper()
-    if ($firstLetter -notmatch '^[A-F]$') { continue }
+    if (-not $TestUser) {
+        $firstLetter = $user.LastName.Substring(0,1).ToUpper()
+        if ($firstLetter -notmatch '^[A-F]$') { continue }
+    }
     
     # Get mailbox stats
     $stats = Get-EXOMailboxStatistics -Identity $mailbox.UserPrincipalName -Properties TotalItemSize -ErrorAction SilentlyContinue
     if (-not $stats) { continue }
     
+    # Parse quota to GB
+    $quotaGB = "Unlimited"
+    if ($mailbox.ProhibitSendReceiveQuota -and -not $mailbox.ProhibitSendReceiveQuota.IsUnlimited) {
+        $quotaBytes = $mailbox.ProhibitSendReceiveQuota.Value.ToBytes()
+        $quotaGB = "$([math]::Round($quotaBytes / 1GB, 2)) GB"
+    }
+    
+    # Parse current size to GB
+    $sizeGB = "0 GB"
+    if ($stats.TotalItemSize) {
+        if ($stats.TotalItemSize -match '\(([0-9,]+) bytes\)') {
+            $sizeBytes = [long]($matches[1] -replace ',', '')
+            $sizeGB = "$([math]::Round($sizeBytes / 1GB, 2)) GB"
+        }
+    }
+    
+    # Get username without domain
+    $username = ($mailbox.UserPrincipalName -split '@')[0]
+    
     [PSCustomObject]@{
         FirstName    = $user.FirstName
         Surname      = $user.LastName
-        EmailAddress = $mailbox.UserPrincipalName
-        MaxQuota     = $mailbox.ProhibitSendReceiveQuota
-        CurrentSize  = $stats.TotalItemSize
+        EmailAddress = $username
+        MaxQuota     = $quotaGB
+        CurrentSize  = $sizeGB
     }
 }
 
