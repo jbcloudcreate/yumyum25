@@ -1,5 +1,7 @@
+$stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+
 # Test user - set to $null to process all A-F, or specify a UPN for testing
-$TestUser = "Dawn.Edwards@south-wales.police.uk"
+$TestUser = "Geraint.Morgan@south-wales.police.uk"
 
 # Get user mailboxes with quota info
 if ($TestUser) {
@@ -36,9 +38,15 @@ $results = foreach ($mailbox in $mailboxes) {
     
     # Parse quota to GB
     $quotaGB = "Unlimited"
-    if ($mailbox.ProhibitSendReceiveQuota -and -not $mailbox.ProhibitSendReceiveQuota.IsUnlimited) {
-        $quotaBytes = $mailbox.ProhibitSendReceiveQuota.Value.ToBytes()
-        $quotaGB = "$([math]::Round($quotaBytes / 1GB, 2)) GB"
+    $quotaValue = $mailbox.ProhibitSendReceiveQuota
+    if ($quotaValue) {
+        if ($quotaValue -match '\(([0-9,]+) bytes\)') {
+            $quotaBytes = [long]($matches[1] -replace ',', '')
+            $quotaGB = "$([math]::Round($quotaBytes / 1GB, 2)) GB"
+        }
+        elseif ($quotaValue -match '^unlimited$') {
+            $quotaGB = "Unlimited"
+        }
     }
     
     # Parse current size to GB
@@ -63,3 +71,6 @@ $results = foreach ($mailbox in $mailboxes) {
 }
 
 $results | Format-Table -AutoSize
+
+$stopwatch.Stop()
+Write-Host "`nExecution time: $([math]::Round($stopwatch.Elapsed.TotalSeconds, 2)) seconds" -ForegroundColor Green
