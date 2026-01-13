@@ -1,12 +1,14 @@
 $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
 
-# Test user - set to $null to process all A-F, or specify a UPN for testing
-$TestUser = "Geraint.Morgan@south-wales.police.uk"
+# Test user - set to $null to process all, or specify a UPN for testing
+$TestUser = $null
+
+# Threshold in GB
+$ThresholdGB = 20
 
 # Get user mailboxes with quota info
 if ($TestUser) {
     $mailboxes = @(Get-EXOMailbox -Identity $TestUser -Properties ProhibitSendReceiveQuota, DisplayName, UserPrincipalName)
-    # Only get the specific user details when testing
     $users = @(Get-User -Identity $TestUser | Select-Object UserPrincipalName, FirstName, LastName)
 } else {
     $mailboxes = Get-EXOMailbox -RecipientTypeDetails UserMailbox -ResultSize Unlimited -Properties ProhibitSendReceiveQuota, DisplayName, UserPrincipalName
@@ -21,20 +23,32 @@ foreach ($user in $users) {
     }
 }
 
-# Filter to surnames A-F and get stats
+# Filter to surnames A-B and get stats
 $results = foreach ($mailbox in $mailboxes) {
     $user = $userLookup[$mailbox.UserPrincipalName.ToLower()]
     
-    # Skip if no surname or not A-F (skip filter if testing single user)
+    # Skip if no surname or not A-B (skip filter if testing single user)
     if (-not $user -or -not $user.LastName) { continue }
     if (-not $TestUser) {
         $firstLetter = $user.LastName.Substring(0,1).ToUpper()
-        if ($firstLetter -notmatch '^[A-F]$') { continue }
+        if ($firstLetter -notmatch '^[A-B]$') { continue }
     }
     
-    # Get mailbox stats - include deleted item properties
+    # Get mailbox stats
     $stats = Get-EXOMailboxStatistics -Identity $mailbox.UserPrincipalName -Properties TotalItemSize, ItemCount, DeletedItemCount, TotalDeletedItemSize -ErrorAction SilentlyContinue
     if (-not $stats) { continue }
+    
+    # Parse current size to bytes for filtering/sorting
+    $sizeBytes = 0
+    if ($stats.TotalItemSize) {
+        if ($stats.TotalItemSize -match '\(([0-9,]+) bytes\)') {
+            $sizeBytes = [long]($matches[1] -replace ',', '')
+        }
+    }
+    
+    # Skip if under threshold
+    $thresholdBytes = $ThresholdGB * 1GB
+    if ($sizeBytes -lt $thresholdBytes) { continue }
     
     # Parse quota to GB
     $quotaGB = "Unlimited"
@@ -46,15 +60,6 @@ $results = foreach ($mailbox in $mailboxes) {
         }
         elseif ($quotaValue -match '^unlimited$') {
             $quotaGB = "Unlimited"
-        }
-    }
-    
-    # Parse current size to GB
-    $sizeGB = "0 GB"
-    if ($stats.TotalItemSize) {
-        if ($stats.TotalItemSize -match '\(([0-9,]+) bytes\)') {
-            $sizeBytes = [long]($matches[1] -replace ',', '')
-            $sizeGB = "$([math]::Round($sizeBytes / 1GB, 2)) GB"
         }
     }
     
@@ -75,14 +80,17 @@ $results = foreach ($mailbox in $mailboxes) {
         Surname          = $user.LastName
         EmailAddress     = $username
         MaxQuota         = $quotaGB
-        CurrentSize      = $sizeGB
+        CurrentSize      = "$([math]::Round($sizeBytes / 1GB, 2)) GB"
+        SizeBytes        = $sizeBytes  # Hidden column for sorting
         ItemCount        = $stats.ItemCount
         DeletedItemCount = $stats.DeletedItemCount
         DeletedItemSize  = $deletedSizeGB
     }
 }
 
-$results | Format-Table -AutoSize
+# Sort by size descending and display (exclude SizeBytes from output)
+$results | Sort-Object SizeBytes -Descending | Select-Object FirstName, Surname, EmailAddress, MaxQuota, CurrentSize, ItemCount, DeletedItemCount, DeletedItemSize | Format-Table -AutoSize
 
 $stopwatch.Stop()
-Write-Host "`nExecution time: $([math]::Round($stopwatch.Elapsed.TotalSeconds, 2)) seconds" -ForegroundColor Green
+Write-Host "`nMailboxes over $ThresholdGB GB: $(@($results).Count)" -ForegroundColor Cyan
+Write-Host "Execution time: $([math]::Round($stopwatch.Elapsed.TotalSeconds, 2)) seconds" -ForegroundColor Green
