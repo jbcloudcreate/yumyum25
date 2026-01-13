@@ -30,8 +30,7 @@ foreach ($stat in $allStatsRaw) {
     if ($processedCount % 500 -eq 0) {
         Write-Progress -Activity "Filtering mailbox statistics" -Status "$processedCount of $totalCount" -PercentComplete (($processedCount / $totalCount) * 100)
     }
-    #endregion Progress Bar 1
-    
+        
     if ($stat.TotalItemSize -match '\(([0-9,]+) bytes\)') {
         $sizeBytes = [long]($matches[1] -replace ',', '')
         if ($sizeBytes -ge ($ThresholdGB * 1GB)) {
@@ -40,9 +39,8 @@ foreach ($stat in $allStatsRaw) {
     }
 }
 
-#region Progress Bar 1 - Complete
 Write-Progress -Activity "Filtering mailbox statistics" -Completed
-#endregion Progress Bar 1 - Complete
+# Progress Bar 1 - Complete
 
 Write-Host "Found $($allStats.Count) mailboxes over $ThresholdGB GB" -ForegroundColor Yellow
 Write-Host "Fetching mailbox and user details..." -ForegroundColor Cyan
@@ -55,10 +53,9 @@ $totalCount = $allStats.Count
 foreach ($stat in $allStats) {
     $processedCount++
     
-    #region Progress Bar 2 - Fetching User Details
+    # Progress Bar 2 - Fetching User Details
     Write-Progress -Activity "Fetching user details" -Status "$processedCount of $totalCount - $($stat.DisplayName)" -PercentComplete (($processedCount / $totalCount) * 100)
-    #endregion Progress Bar 2
-    
+        
     # Get mailbox details
     $mailbox = Get-EXOMailbox -Identity $stat.DisplayName -Properties ProhibitSendReceiveQuota, UserPrincipalName -ErrorAction SilentlyContinue
     if (-not $mailbox) { continue }
@@ -105,14 +102,15 @@ foreach ($stat in $allStats) {
     })
 }
 
-#region Progress Bar 2 - Complete
 Write-Progress -Activity "Fetching user details" -Completed
-#endregion Progress Bar 2 - Complete
+# Progress Bar 2 - Complete
 
 # Sort and display
 $results | Sort-Object SizeBytes -Descending | Select-Object FirstName, Surname, EmailAddress, MaxQuota, CurrentSize, ItemCount, DeletedItemCount, DeletedItemSize | Format-Table -AutoSize
 
+# Stopwatch Finishes
 $stopwatch.Stop()
+
 Write-Host "`nMailboxes over $ThresholdGB GB: $($results.Count)" -ForegroundColor Cyan
 Write-Host "Execution time: $([math]::Round($stopwatch.Elapsed.TotalSeconds, 2)) seconds" -ForegroundColor Green
 
