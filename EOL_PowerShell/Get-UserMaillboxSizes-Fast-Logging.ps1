@@ -118,7 +118,6 @@ Write-Host "Execution time: $([math]::Round($stopwatch.Elapsed.TotalSeconds, 2))
 
 # Store results for piping to email
 $global:LargeMailboxes = $results
-Write-Host "`nResults stored in `$LargeMailboxes for email processing" -ForegroundColor Gray
 
 # ============================================
 # LOG TO FILE SECTION
@@ -127,7 +126,6 @@ Write-Host "`nResults stored in `$LargeMailboxes for email processing" -Foregrou
 #region Log Configuration
 $EnableLogging = $true
 $LogFilePath = "\\ServerName\Share\Logs\MailboxSizeReport.log"  # Update with your server path
-$CSVExportPath = "\\ServerName\Share\Logs\LargeMailboxes.csv"   # Update with your server path
 #endregion Log Configuration
 
 #region Logging Function
@@ -137,7 +135,7 @@ function Write-Log {
         [string]$Level = "INFO"
     )
     
-    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    $timestamp = Get-Date -Format "dd/MM/yyyy HH:mm:ss"
     $logEntry = "[$timestamp] [$Level] $Message"
     
     # Append to log file
@@ -178,35 +176,3 @@ if ($EnableLogging) {
     Write-Log "========================================"
 }
 #endregion Write Log Entries
-
-#region Export to CSV
-if ($EnableLogging -and $results.Count -gt 0) {
-    try {
-        # Append to CSV with date column
-        $exportData = $LargeMailboxes | Select-Object @{N='ReportDate';E={Get-Date -Format "yyyy-MM-dd"}}, 
-                                                       FirstName, 
-                                                       Surname, 
-                                                       EmailAddress, 
-                                                       UPN, 
-                                                       MaxQuota, 
-                                                       CurrentSize, 
-                                                       SizeBytes, 
-                                                       ItemCount, 
-                                                       DeletedItemCount, 
-                                                       DeletedItemSize
-        
-        # Check if file exists for append
-        if (Test-Path $CSVExportPath) {
-            $exportData | Export-Csv -Path $CSVExportPath -NoTypeInformation -Append
-            Write-Log "Results appended to CSV: $CSVExportPath" "SUCCESS"
-        }
-        else {
-            $exportData | Export-Csv -Path $CSVExportPath -NoTypeInformation
-            Write-Log "CSV created: $CSVExportPath" "SUCCESS"
-        }
-    }
-    catch {
-        Write-Log "Failed to export CSV: $_" "ERROR"
-    }
-}
-#endregion Export to CSV
