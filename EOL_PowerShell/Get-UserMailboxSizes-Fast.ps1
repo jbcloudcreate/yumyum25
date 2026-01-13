@@ -13,8 +13,8 @@ $ThresholdGB = 90
 
 Write-Host "Fetching all mailbox statistics..." -ForegroundColor Cyan
 
-# Get all user mailbox statistics in one bulk call
-$allStatsRaw = Get-EXOMailboxStatistics -ResultSize Unlimited -Properties TotalItemSize, ItemCount, DeletedItemCount, TotalDeletedItemSize
+# Get all user mailbox statistics in one bulk call (no ResultSize parameter needed)
+$allStatsRaw = Get-EXOMailboxStatistics -Properties TotalItemSize, ItemCount, DeletedItemCount, TotalDeletedItemSize
 
 Write-Host "Processing $($allStatsRaw.Count) mailboxes..." -ForegroundColor Cyan
 
@@ -30,7 +30,8 @@ foreach ($stat in $allStatsRaw) {
     if ($processedCount % 500 -eq 0) {
         Write-Progress -Activity "Filtering mailbox statistics" -Status "$processedCount of $totalCount" -PercentComplete (($processedCount / $totalCount) * 100)
     }
-        
+    #endregion Progress Bar 1
+    
     if ($stat.TotalItemSize -match '\(([0-9,]+) bytes\)') {
         $sizeBytes = [long]($matches[1] -replace ',', '')
         if ($sizeBytes -ge ($ThresholdGB * 1GB)) {
@@ -39,8 +40,9 @@ foreach ($stat in $allStatsRaw) {
     }
 }
 
+#region Progress Bar 1 - Complete
 Write-Progress -Activity "Filtering mailbox statistics" -Completed
-# Progress Bar 1 - Complete
+#endregion Progress Bar 1 - Complete
 
 Write-Host "Found $($allStats.Count) mailboxes over $ThresholdGB GB" -ForegroundColor Yellow
 Write-Host "Fetching mailbox and user details..." -ForegroundColor Cyan
@@ -53,9 +55,10 @@ $totalCount = $allStats.Count
 foreach ($stat in $allStats) {
     $processedCount++
     
-    # Progress Bar 2 - Fetching User Details
+    #region Progress Bar 2 - Fetching User Details
     Write-Progress -Activity "Fetching user details" -Status "$processedCount of $totalCount - $($stat.DisplayName)" -PercentComplete (($processedCount / $totalCount) * 100)
-        
+    #endregion Progress Bar 2
+    
     # Get mailbox details
     $mailbox = Get-EXOMailbox -Identity $stat.DisplayName -Properties ProhibitSendReceiveQuota, UserPrincipalName -ErrorAction SilentlyContinue
     if (-not $mailbox) { continue }
@@ -102,15 +105,14 @@ foreach ($stat in $allStats) {
     })
 }
 
+#region Progress Bar 2 - Complete
 Write-Progress -Activity "Fetching user details" -Completed
-# Progress Bar 2 - Complete
+#endregion Progress Bar 2 - Complete
 
 # Sort and display
 $results | Sort-Object SizeBytes -Descending | Select-Object FirstName, Surname, EmailAddress, MaxQuota, CurrentSize, ItemCount, DeletedItemCount, DeletedItemSize | Format-Table -AutoSize
 
-# Stopwatch Finishes
 $stopwatch.Stop()
-
 Write-Host "`nMailboxes over $ThresholdGB GB: $($results.Count)" -ForegroundColor Cyan
 Write-Host "Execution time: $([math]::Round($stopwatch.Elapsed.TotalSeconds, 2)) seconds" -ForegroundColor Green
 
