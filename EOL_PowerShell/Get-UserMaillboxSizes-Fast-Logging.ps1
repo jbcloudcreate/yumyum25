@@ -128,7 +128,7 @@ $EnableLogging = $true
 $LogFilePath = "\\ServerName\Share\Logs\MailboxSizeReport.log"  # Update with your server path
 #endregion Log Configuration
 
-#region Logging Function
+# Logging Function
 function Write-Log {
     param (
         [string]$Message,
@@ -142,19 +142,10 @@ function Write-Log {
     if ($EnableLogging) {
         Add-Content -Path $LogFilePath -Value $logEntry -ErrorAction SilentlyContinue
     }
-    
-    # Also output to screen
-    switch ($Level) {
-        "INFO"    { Write-Host $logEntry -ForegroundColor Gray }
-        "SUCCESS" { Write-Host $logEntry -ForegroundColor Green }
-        "WARNING" { Write-Host $logEntry -ForegroundColor Yellow }
-        "ERROR"   { Write-Host $logEntry -ForegroundColor Red }
-        default   { Write-Host $logEntry }
-    }
+        
 }
-#endregion Logging Function
 
-#region Write Log Entries
+# Write Log Entries
 if ($EnableLogging) {
     # Log header
     Write-Log "========================================"
@@ -175,4 +166,4 @@ if ($EnableLogging) {
     Write-Log "Report completed" "SUCCESS"
     Write-Log "========================================"
 }
-#endregion Write Log Entries
+# Write Log Entries
