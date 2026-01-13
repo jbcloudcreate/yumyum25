@@ -11,43 +11,27 @@ $stopwatch = [System.Diagnostics.Stopwatch]::StartNew()
 # Threshold in GB
 $ThresholdGB = 90
 
-Write-Host "Fetching all mailbox statistics..." -ForegroundColor Cyan
+Write-Host "Fetching all user mailboxes..." -ForegroundColor Cyan
 
-# Get all user mailbox statistics in one bulk call (no ResultSize parameter needed)
-$allStatsRaw = Get-EXOMailboxStatistics -Properties TotalItemSize, ItemCount, DeletedItemCount, TotalDeletedItemSize
+# Get all user mailboxes
+$allMailboxes = Get-EXOMailbox -RecipientTypeDetails UserMailbox -ResultSize Unlimited -Properties ProhibitSendReceiveQuota, UserPrincipalName, DisplayName
 
-Write-Host "Processing $($allStatsRaw.Count) mailboxes..." -ForegroundColor Cyan
+Write-Host "Found $($allMailboxes.Count) user mailboxes" -ForegroundColor Green
+Write-Host "Fetching all statistics via pipeline (this is the bulk operation)..." -ForegroundColor Cyan
 
-# Filter to mailboxes over threshold with progress
-$allStats = [System.Collections.Generic.List[object]]::new()
-$processedCount = 0
-$totalCount = $allStatsRaw.Count
+# Pipeline the mailboxes to get stats in bulk - this should batch internally
+$allStats = $allMailboxes | Get-EXOMailboxStatistics -Properties TotalItemSize, ItemCount, DeletedItemCount, TotalDeletedItemSize -ErrorAction SilentlyContinue
 
-foreach ($stat in $allStatsRaw) {
-    $processedCount++
-    
-    #region Progress Bar 1 - Filtering Statistics
-    if ($processedCount % 500 -eq 0) {
-        Write-Progress -Activity "Filtering mailbox statistics" -Status "$processedCount of $totalCount" -PercentComplete (($processedCount / $totalCount) * 100)
-    }
-    #endregion Progress Bar 1
-    
-    if ($stat.TotalItemSize -match '\(([0-9,]+) bytes\)') {
-        $sizeBytes = [long]($matches[1] -replace ',', '')
-        if ($sizeBytes -ge ($ThresholdGB * 1GB)) {
-            $allStats.Add($stat)
-        }
-    }
+Write-Host "Retrieved $($allStats.Count) statistics" -ForegroundColor Green
+Write-Host "Filtering to mailboxes over $ThresholdGB GB..." -ForegroundColor Cyan
+
+# Create lookup for mailbox details by DisplayName
+$mailboxLookup = @{}
+foreach ($mbx in $allMailboxes) {
+    $mailboxLookup[$mbx.DisplayName] = $mbx
 }
 
-#region Progress Bar 1 - Complete
-Write-Progress -Activity "Filtering mailbox statistics" -Completed
-#endregion Progress Bar 1 - Complete
-
-Write-Host "Found $($allStats.Count) mailboxes over $ThresholdGB GB" -ForegroundColor Yellow
-Write-Host "Fetching mailbox and user details..." -ForegroundColor Cyan
-
-# Now get details only for mailboxes over threshold
+# Filter and process
 $results = [System.Collections.Generic.List[object]]::new()
 $processedCount = 0
 $totalCount = $allStats.Count
@@ -55,27 +39,30 @@ $totalCount = $allStats.Count
 foreach ($stat in $allStats) {
     $processedCount++
     
-    #region Progress Bar 2 - Fetching User Details
-    Write-Progress -Activity "Fetching user details" -Status "$processedCount of $totalCount - $($stat.DisplayName)" -PercentComplete (($processedCount / $totalCount) * 100)
-    #endregion Progress Bar 2
+    #region Progress Bar - Filtering Statistics
+    if ($processedCount % 500 -eq 0) {
+        Write-Progress -Activity "Filtering statistics" -Status "$processedCount of $totalCount" -PercentComplete (($processedCount / $totalCount) * 100)
+    }
+    #endregion Progress Bar
     
-    # Get mailbox details
-    $mailbox = Get-EXOMailbox -Identity $stat.DisplayName -Properties ProhibitSendReceiveQuota, UserPrincipalName -ErrorAction SilentlyContinue
-    if (-not $mailbox) { continue }
-    
-    # Skip shared mailboxes
-    if ($mailbox.RecipientTypeDetails -ne 'UserMailbox') { continue }
-    
-    # Get user details for name
-    $user = Get-User -Identity $mailbox.UserPrincipalName -ErrorAction SilentlyContinue
-    if (-not $user -or -not $user.LastName) { continue }
-    
-    # Parse sizes
+    # Parse size and check threshold
     $sizeBytes = 0
     if ($stat.TotalItemSize -match '\(([0-9,]+) bytes\)') {
         $sizeBytes = [long]($matches[1] -replace ',', '')
     }
     
+    # Skip if under threshold
+    if ($sizeBytes -lt ($ThresholdGB * 1GB)) { continue }
+    
+    # Get mailbox from lookup
+    $mailbox = $mailboxLookup[$stat.DisplayName]
+    if (-not $mailbox) { continue }
+    
+    # Get user details for name
+    $user = Get-User -Identity $mailbox.UserPrincipalName -ErrorAction SilentlyContinue
+    if (-not $user -or -not $user.LastName) { continue }
+    
+    # Parse deleted size
     $deletedSizeGB = "0 GB"
     if ($stat.TotalDeletedItemSize -match '\(([0-9,]+) bytes\)') {
         $deletedBytes = [long]($matches[1] -replace ',', '')
@@ -103,11 +90,13 @@ foreach ($stat in $allStats) {
         DeletedItemCount = $stat.DeletedItemCount
         DeletedItemSize  = $deletedSizeGB
     })
+    
+    Write-Host "  Found: $($user.FirstName) $($user.LastName) - $([math]::Round($sizeBytes / 1GB, 2)) GB" -ForegroundColor Yellow
 }
 
-#region Progress Bar 2 - Complete
-Write-Progress -Activity "Fetching user details" -Completed
-#endregion Progress Bar 2 - Complete
+#region Progress Bar - Complete
+Write-Progress -Activity "Filtering statistics" -Completed
+#endregion Progress Bar - Complete
 
 # Sort and display
 $results | Sort-Object SizeBytes -Descending | Select-Object FirstName, Surname, EmailAddress, MaxQuota, CurrentSize, ItemCount, DeletedItemCount, DeletedItemSize | Format-Table -AutoSize
