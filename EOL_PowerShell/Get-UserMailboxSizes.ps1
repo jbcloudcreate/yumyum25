@@ -5,13 +5,13 @@ $TestUser = "Geraint.Morgan@south-wales.police.uk"
 
 # Get user mailboxes with quota info
 if ($TestUser) {
-    $mailboxes = Get-EXOMailbox -Identity $TestUser -Properties ProhibitSendReceiveQuota, DisplayName, UserPrincipalName
+    $mailboxes = @(Get-EXOMailbox -Identity $TestUser -Properties ProhibitSendReceiveQuota, DisplayName, UserPrincipalName)
+    # Only get the specific user details when testing
+    $users = @(Get-User -Identity $TestUser | Select-Object UserPrincipalName, FirstName, LastName)
 } else {
     $mailboxes = Get-EXOMailbox -RecipientTypeDetails UserMailbox -ResultSize Unlimited -Properties ProhibitSendReceiveQuota, DisplayName, UserPrincipalName
+    $users = Get-User -ResultSize Unlimited | Select-Object UserPrincipalName, FirstName, LastName
 }
-
-# Get user details for names
-$users = Get-User -ResultSize Unlimited | Select-Object UserPrincipalName, FirstName, LastName
 
 # Create lookup for users
 $userLookup = @{}
@@ -32,8 +32,8 @@ $results = foreach ($mailbox in $mailboxes) {
         if ($firstLetter -notmatch '^[A-F]$') { continue }
     }
     
-    # Get mailbox stats
-    $stats = Get-EXOMailboxStatistics -Identity $mailbox.UserPrincipalName -Properties TotalItemSize -ErrorAction SilentlyContinue
+    # Get mailbox stats - include deleted item properties
+    $stats = Get-EXOMailboxStatistics -Identity $mailbox.UserPrincipalName -Properties TotalItemSize, ItemCount, DeletedItemCount, TotalDeletedItemSize -ErrorAction SilentlyContinue
     if (-not $stats) { continue }
     
     # Parse quota to GB
@@ -58,15 +58,27 @@ $results = foreach ($mailbox in $mailboxes) {
         }
     }
     
+    # Parse deleted item size to GB
+    $deletedSizeGB = "0 GB"
+    if ($stats.TotalDeletedItemSize) {
+        if ($stats.TotalDeletedItemSize -match '\(([0-9,]+) bytes\)') {
+            $deletedBytes = [long]($matches[1] -replace ',', '')
+            $deletedSizeGB = "$([math]::Round($deletedBytes / 1GB, 2)) GB"
+        }
+    }
+    
     # Get username without domain
     $username = ($mailbox.UserPrincipalName -split '@')[0]
     
     [PSCustomObject]@{
-        FirstName    = $user.FirstName
-        Surname      = $user.LastName
-        EmailAddress = $username
-        MaxQuota     = $quotaGB
-        CurrentSize  = $sizeGB
+        FirstName        = $user.FirstName
+        Surname          = $user.LastName
+        EmailAddress     = $username
+        MaxQuota         = $quotaGB
+        CurrentSize      = $sizeGB
+        ItemCount        = $stats.ItemCount
+        DeletedItemCount = $stats.DeletedItemCount
+        DeletedItemSize  = $deletedSizeGB
     }
 }
 
