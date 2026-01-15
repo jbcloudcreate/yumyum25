@@ -174,14 +174,15 @@ if ($EnableLogging) {
 
 # Email Configuration
 $SendEmails = $false  # Set to $true to actually send emails
-$TestMode = $true     # Set to $true to preview emails without sending
+$TestMode = $true     # Set to $true to send test emails to TestEmailAddress instead of real users
+$TestEmailAddress = "your.test.account@south-wales.police.uk"  # Test recipient for TestMode
 $FromAddress = "ict-noreply@south-wales.police.uk"
 $SMTPServer = "smtp-in.swp.police.uk"
 $EmailSubject = "Mailbox Storage Warning - Action Required"
 
 # Email Template
 $EmailBodyTemplate = @"
-Dear {User], 
+Dear {FirstName}, 
 
 We are writing to inform you that your mailbox size has exceeded the recommended limit. To ensure you can continue to send and receive emails without any interruptions, we kindly ask you to reduce your mailbox size. 
 
@@ -229,10 +230,11 @@ This is an automated message. Please do not reply directly to this email.
 # Send Emails action
 if ($SendEmails -and $LargeMailboxes.Count -gt 0) {
     
-    Write-Host "`n--- Email Notifications ---" -ForegroundColor Cyan
+    if ($TestMode) {
+        Write-Host "`n--- TEST MODE: Emails will be sent to $TestEmailAddress ---" -ForegroundColor Magenta
+    }
     
-    # Get credentials for SMTP authentication (uncomment if needed)
-    # $Credential = Get-Credential -Message "Enter credentials for sending emails"
+    Write-Host "`n--- Email Notifications ---" -ForegroundColor Cyan
     
     $emailsSent = 0
     $emailsFailed = 0
@@ -248,39 +250,37 @@ if ($SendEmails -and $LargeMailboxes.Count -gt 0) {
                                         -replace '{DeletedItemCount}', $user.DeletedItemCount `
                                         -replace '{DeletedItemSize}', $user.DeletedItemSize
         
-        if ($TestMode) {
-            # Preview mode - show what would be sent
-            Write-Host "`n--- Preview Email to: $($user.UPN) ---" -ForegroundColor Yellow
-            Write-Host "Subject: $EmailSubject" -ForegroundColor Gray
-            Write-Host $emailBody -ForegroundColor Gray
-            Write-Host "--- End Preview ---" -ForegroundColor Yellow
+        # Determine recipient - test account or real user
+        $recipient = if ($TestMode) { $TestEmailAddress } else { $user.UPN }
+        
+        # Modify subject in test mode to show intended recipient
+        $subject = if ($TestMode) { "[TEST - Intended for: $($user.UPN)] $EmailSubject" } else { $EmailSubject }
+        
+        try {
+            $emailParams = @{
+                From       = $FromAddress
+                To         = $recipient
+                Subject    = $subject
+                Body       = $emailBody
+                SmtpServer = $SMTPServer
+            }
+            
+            Send-MailMessage @emailParams
+            Write-Host "Email sent to: $recipient $(if ($TestMode) { "(intended for $($user.UPN))" })" -ForegroundColor Green
+            $emailsSent++
         }
-        else {
-            # Actually send the email
-            try {
-                $emailParams = @{
-                    From       = $FromAddress
-                    To         = $LargeMailboxes.UPN
-                    Subject    = $EmailSubject
-                    Body       = $emailBody
-                    SmtpServer = $SMTPServer
-                                   
-                }
-                
-                Send-MailMessage @emailParams
-                Write-Host "Email sent to: $($user.UPN)" -ForegroundColor Green
-                $emailsSent++
-            }
-            catch {
-                Write-Host "Failed to send email to: $($user.UPN) - $_" -ForegroundColor Red
-                $emailsFailed++
-            }
+        catch {
+            Write-Host "Failed to send email to: $recipient - $_" -ForegroundColor Red
+            $emailsFailed++
         }
     }
     
-    if (-not $TestMode) {
-        Write-Host "`nEmails sent: $emailsSent" -ForegroundColor Green
-        Write-Host "Emails failed: $emailsFailed" -ForegroundColor $(if ($emailsFailed -gt 0) { 'Red' } else { 'Green' })
+    Write-Host "`nEmails sent: $emailsSent" -ForegroundColor Green
+    Write-Host "Emails failed: $emailsFailed" -ForegroundColor $(if ($emailsFailed -gt 0) { 'Red' } else { 'Green' })
+    
+    if ($TestMode) {
+        Write-Host "`nTEST MODE: All emails sent to $TestEmailAddress" -ForegroundColor Magenta
+        Write-Host "Set `$TestMode = `$false to send to actual users" -ForegroundColor Magenta
     }
 }
 elseif ($LargeMailboxes.Count -eq 0) {
