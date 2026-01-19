@@ -225,8 +225,8 @@ if ($EnableLogging) {
 $SendEmails = $true  # Set to $true to actually send emails
 $TestMode = $true     # Set to $true to send test emails to TestEmailAddress instead of real users
 $TestEmailAddress = "james.buller@south-wales.police.uk"  # Recipient for TestMode
-$MonitoredEmailAddress = "james.buller@south-wales.police.uk"  # Email address to receive mailbox summary
-$FromAddress = "ict-noreply@south-wales.police.uk"
+$MonitoredEmailAddress = @("james.buller@south-wales.police.uk", "another.user@south-wales.police.uk")  # Email addresses to receive mailbox summary
+$FromAddress = "ICT Mailbox Notifications <ict-noreply@south-wales.police.uk>"
 $SMTPServer = "smtp-in.swp.police.uk"
 
 # LICENSED Email Template (85-100GB range)
