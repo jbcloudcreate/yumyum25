@@ -11,6 +11,8 @@
 .NOTES
     Requires the ExchangeOnlineManagement module to be installed.
     Update $AdminUPN and $TestMailbox variables before running.
+.EXMPLE
+"C:\Program Files\PowerShell\7\pwsh.exe" -NoExit -File "C:\Scripts\Connect-EXO.ps1"
 #>
 
 $AdminUPN     = "admin@contoso.com"
