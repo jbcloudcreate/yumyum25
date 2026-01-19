@@ -1,3 +1,18 @@
+<#
+.SYNOPSIS
+    Connects to Exchange Online and verifies access by testing mailbox retrieval.
+
+.DESCRIPTION
+    This script connects to Exchange Online using the specified admin account and
+    validates the connection by attempting to retrieve a test mailbox. It provides
+    color-coded feedback indicating success, partial success (connected but test
+    mailbox not found), or failure.
+
+.NOTES
+    Requires the ExchangeOnlineManagement module to be installed.
+    Update $AdminUPN and $TestMailbox variables before running.
+#>
+
 $AdminUPN     = "admin@contoso.com"
 $TestMailbox  = "someone@contoso.com"
 $SuccessText  = "Connected to EXO and PIM'd up"
