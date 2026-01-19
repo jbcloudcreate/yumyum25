@@ -244,63 +244,9 @@ if ($EnableLogging) {
 $SendEmails = $true  # Set to $true to actually send emails
 $TestMode = $true     # Set to $true to send test emails to TestEmailAddress instead of real users
 $TestEmailAddress = "james.buller@south-wales.police.uk"  # Test recipient for TestMode
+$MonitoredEmailAddress = "ict-monitoring@south-wales.police.uk"  # Email address to receive unlicensed mailbox summary
 $FromAddress = "ict-noreply@south-wales.police.uk"
 $SMTPServer = "smtp-in.swp.police.uk"
-
-# Email Templates - Different for each category
-
-# UNLICENSED Email Template (40-50GB range)
-$UnlicensedEmailSubject = "Shared Mailbox Storage Warning - Unlicensed Limit Approaching"
-$UnlicensedEmailTemplate = @"
-Dear Mailbox Administrator, 
-
-We are writing to inform you that a shared mailbox under your management is approaching the FREE TIER storage limit. Unlicensed shared mailboxes have a maximum capacity of 50GB.
-
-Our records show that the shared mailbox '{DisplayName}' has reached {CurrentSize} and is approaching the 50GB unlicensed limit.
-
-Current Mailbox Statistics:
-- Mailbox: {DisplayName}
-- Email Address: {UPN}
-- Current Size: {CurrentSize}
-- Maximum Free Tier Limit: 50 GB
-- Items in Mailbox: {ItemCount}
-- Deleted Items: {DeletedItemCount} ({DeletedItemSize})
-
-IMPORTANT: This mailbox is currently unlicensed and will stop functioning when it reaches 50GB.
-
-Options to resolve this:
-1. Reduce the mailbox size below 40GB (recommended for unlicensed mailboxes)
-2. Request a license for this mailbox to increase the limit to 100GB
-
-Steps to reduce mailbox size:
-
-Step 1: Sort and Delete Large Emails 
-    Open Outlook and access the shared mailbox.
-    Go to the Inbox (or any folder). 
-    Click View > Arrange By > Size (or use the Sort by Size option). 
-    Review the largest emails at the top. 
-    Delete emails that are no longer needed. 
-	
-If you need the attachment: 
-    Open the email. 
-    Save the attachment to a secure location (e.g., SharePoint or shared drive). 
-    Delete the email or remove the attachment. 
-
-Step 2: Empty Deleted Items and Junk 
-    In the Folder Pane, right-click Deleted Items. 
-    Select Empty Folder. 
-    Repeat for Junk Email folder. 
-
-If you have any questions or need to request a license, please contact the ICT Service Desk:
-Telephone: x20888 / 01656 869505 - ICTServiceDesk@south-wales.police.uk
-
-Thank you for your cooperation. 
-
-Best regards, 
-
----
-This is an automated message. Please do not reply directly to this email.
-"@
 
 # LICENSED Email Template (85-100GB range)
 $LicensedEmailSubject = "Shared Mailbox Storage Warning - Licensed Limit Approaching"
@@ -357,55 +303,79 @@ Best regards,
 This is an automated message. Please do not reply directly to this email.
 "@
 
-# Send Emails for UNLICENSED mailboxes
+# ============================================
+# SEND EMAIL NOTIFICATIONS
+# ============================================
+
+# Send summary email for UNLICENSED mailboxes to monitored address
 if ($SendEmails -and $UnlicensedMailboxes.Count -gt 0) {
     
-    if ($TestMode) {
-        Write-Host "`n--- TEST MODE: Unlicensed mailbox emails will be sent to $TestEmailAddress ---" -ForegroundColor Magenta
+    Write-Host "`n--- Unlicensed Mailbox Summary Report ---" -ForegroundColor Yellow
+    
+    # Build the mailbox list for the email body
+    $mailboxList = ""
+    foreach ($mbx in $UnlicensedMailboxes | Sort-Object SizeGB -Descending) {
+        $mailboxList += "- $($mbx.DisplayName)`n"
+        $mailboxList += "  Email: $($mbx.UPN)`n"
+        $mailboxList += "  Current Size: $($mbx.CurrentSize)`n"
+        $mailboxList += "  Items: $($mbx.ItemCount) | Deleted Items: $($mbx.DeletedItemCount) ($($mbx.DeletedItemSize))`n"
+        $mailboxList += "`n"
     }
     
-    Write-Host "`n--- Email Notifications - UNLICENSED MAILBOXES ---" -ForegroundColor Yellow
+    # Create summary email body
+    $summaryEmailBody = @"
+Unlicensed Shared Mailbox Storage Alert
+========================================
+
+The following shared mailboxes are approaching the FREE TIER 50GB storage limit.
+These mailboxes are currently unlicensed and will stop functioning when they reach 50GB.
+
+Total Mailboxes in Warning Range (40-50GB): $($UnlicensedMailboxes.Count)
+
+Mailboxes Requiring Attention:
+$mailboxList
+
+Recommended Actions:
+1. Review each mailbox and determine if it should remain unlicensed
+2. For mailboxes that need to stay active:
+   - Reduce mailbox size below 40GB, OR
+   - Request a license to increase limit to 100GB
+3. For mailboxes no longer needed:
+   - Archive or delete old content
+   - Consider decommissioning the mailbox
+
+---
+This is an automated report generated on $(Get-Date -Format "dd/MM/yyyy HH:mm:ss")
+"@
     
-    $emailsSent = 0
-    $emailsFailed = 0
+    $summarySubject = "Shared Mailbox Report - $($UnlicensedMailboxes.Count) Unlicensed Mailbox(es) Approaching 50GB Limit"
     
-    foreach ($mbx in $UnlicensedMailboxes) {
-        
-        # Build personalised email body
-        $emailBody = $UnlicensedEmailTemplate -replace '{DisplayName}', $mbx.DisplayName `
-                                              -replace '{CurrentSize}', $mbx.CurrentSize `
-                                              -replace '{ItemCount}', $mbx.ItemCount `
-                                              -replace '{DeletedItemCount}', $mbx.DeletedItemCount `
-                                              -replace '{DeletedItemSize}', $mbx.DeletedItemSize `
-                                              -replace '{UPN}', $mbx.UPN
-        
-        # Determine recipient - test account or shared mailbox address
-        $recipient = if ($TestMode) { $TestEmailAddress } else { $mbx.UPN }
-        
-        # Modify subject in test mode
-        $subject = if ($TestMode) { "[TEST - Intended for: $($mbx.UPN)] $UnlicensedEmailSubject" } else { $UnlicensedEmailSubject }
-        
-        try {
-            $emailParams = @{
-                From       = $FromAddress
-                To         = $recipient
-                Subject    = $subject
-                Body       = $emailBody
-                SmtpServer = $SMTPServer
-            }
-            
-            Send-MailMessage @emailParams
-            Write-Host "  Email sent to: $recipient $(if ($TestMode) { "(intended for $($mbx.UPN))" })" -ForegroundColor Green
-            $emailsSent++
+    # Determine recipient based on test mode
+    $summaryRecipient = if ($TestMode) { $TestEmailAddress } else { $MonitoredEmailAddress }
+    $summarySubject = if ($TestMode) { "[TEST] $summarySubject" } else { $summarySubject }
+    
+    try {
+        $summaryEmailParams = @{
+            From       = $FromAddress
+            To         = $summaryRecipient
+            Subject    = $summarySubject
+            Body       = $summaryEmailBody
+            SmtpServer = $SMTPServer
         }
-        catch {
-            Write-Host "  Failed to send email to: $recipient - $_" -ForegroundColor Red
-            $emailsFailed++
+        
+        Send-MailMessage @summaryEmailParams
+        Write-Host "Summary email sent to: $summaryRecipient" -ForegroundColor Green
+        
+        if ($TestMode) {
+            Write-Host "TEST MODE: Summary intended for $MonitoredEmailAddress" -ForegroundColor Magenta
         }
     }
-    
-    Write-Host "Unlicensed emails sent: $emailsSent" -ForegroundColor Green
-    Write-Host "Unlicensed emails failed: $emailsFailed" -ForegroundColor $(if ($emailsFailed -gt 0) { 'Red' } else { 'Green' })
+    catch {
+        Write-Host "Failed to send summary email to: $summaryRecipient - $_" -ForegroundColor Red
+    }
+}
+elseif ($UnlicensedMailboxes.Count -eq 0) {
+    Write-Host "`nNo unlicensed mailboxes in warning range (40-50GB)" -ForegroundColor Green
 }
 
 # Send Emails for LICENSED mailboxes
@@ -461,9 +431,20 @@ if ($SendEmails -and $LicensedMailboxes.Count -gt 0) {
 
 # Summary
 if ($SendEmails) {
+    Write-Host "`n=== EMAIL SUMMARY ===" -ForegroundColor Cyan
+    
+    if ($UnlicensedMailboxes.Count -gt 0) {
+        Write-Host "Unlicensed mailboxes: Summary report sent to monitored address" -ForegroundColor Yellow
+    }
+    
+    if ($LicensedMailboxes.Count -gt 0) {
+        Write-Host "Licensed mailboxes: Individual emails sent to each mailbox" -ForegroundColor Magenta
+    }
+    
     if ($TestMode) {
         Write-Host "`nTEST MODE: All emails sent to $TestEmailAddress" -ForegroundColor Magenta
-        Write-Host "Set `$TestMode = `$false to send to actual mailbox addresses" -ForegroundColor Magenta
+        Write-Host "Unlicensed summary intended for: $MonitoredEmailAddress" -ForegroundColor Magenta
+        Write-Host "Set `$TestMode = `$false to send to actual addresses" -ForegroundColor Magenta
     }
 }
 elseif ($UnlicensedMailboxes.Count -eq 0 -and $LicensedMailboxes.Count -eq 0) {
