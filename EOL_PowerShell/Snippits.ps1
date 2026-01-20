@@ -58,3 +58,28 @@ catch {
 
 Write-Host "`nSearching for permissions... This may take a few minutes.`n" -ForegroundColor Cyan
 
+# Part 2
+# Initialize results array
+$Results = @()
+
+# 1. CHECK FULL ACCESS PERMISSIONS
+Write-Host "Checking Full Access permissions..." -ForegroundColor Cyan
+$AllMailboxes = Get-EXOMailbox -ResultSize Unlimited -Properties GrantSendOnBehalfTo
+
+foreach ($Mailbox in $AllMailboxes) {
+    $FullAccess = Get-EXOMailboxPermission -Identity $Mailbox.UserPrincipalName | 
+        Where-Object { $_.User -eq $UserEmail -and $_.AccessRights -contains "FullAccess" }
+    
+    if ($FullAccess) {
+        $Results += [PSCustomObject]@{
+            PermissionType = "Full Access"
+            TargetMailbox = $Mailbox.DisplayName
+            TargetEmail = $Mailbox.UserPrincipalName
+            MailboxType = $Mailbox.RecipientTypeDetails
+            AccessRights = "FullAccess"
+        }
+        Write-Host "  Found: Full Access to $($Mailbox.DisplayName)" -ForegroundColor Yellow
+    }
+}
+
+Write-Host "Full Access check complete.`n" -ForegroundColor Green
