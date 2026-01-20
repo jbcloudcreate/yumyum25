@@ -5,13 +5,13 @@
 .DESCRIPTION
     Connects to Exchange Online and retrieves all shared mailboxes in bulk.
     Filters mailboxes into two warning categories:
-      - Unlicensed (40-50GB): Approaching the 50GB free tier limit
-      - Licensed (85-100GB): Approaching the 100GB licensed limit
+      - Unlicensed (40-50GB): Approaching the 50GB
+      - Licensed (85-100GB): Approaching the 100GB
 
     For each category, the script:
       - Logs results to a file (C:\temp\SharedMailboxSizeReport.log)
       - Sends a summary email to the UC team with all flagged mailboxes
-      - Sends individual warning emails to licensed mailboxes approaching their limit
+      - Sends individual warning emails to LICENSED mailboxes approaching their limit with a 'High' priority flag
 
 .OUTPUTS 
     $global:UnlicensedMailboxes - Collection of unlicensed mailboxes in the 40-50GB range
@@ -21,14 +21,12 @@
     Requires: Exchange Online PowerShell module
     Requires: Pre-configured environment variables for certificate-based authentication in Powershell Universal
 .EXAMPLE
-.\SharedMailboxesOverThresholds-v2.ps1
+.\Get-SharedMailboxesOverThresholds.ps1
 #>
 
 # ============================================
 # CONNECT TO EXCHANGE ONLINE
 # ============================================
-
-# Connect-ExchangeOnline -CertificateThumbPrint "B9FED654D4DD7FB3F16A227FA760CBA13DD8A54D" -AppID "eeb65737-0d8c-4728-b376-fd33e5ca4258" -Organization "southwalespolice.onmicrosoft.com" -ShowBanner:$false
 
 $ExoSplat = @{
     CertificateThumbPrint = $ExchangeOnlineCertRO
@@ -225,56 +223,18 @@ if ($EnableLogging) {
 $SendEmails = $true  # Set to $true to actually send emails
 $TestMode = $true     # Set to $true to send test emails to TestEmailAddress instead of real users
 $TestEmailAddress = "james.buller@south-wales.police.uk"  # Recipient for TestMode
-$MonitoredEmailAddress = "james.buller@south-wales.police.uk" # Email addresses to receive mailbox summary
+$MonitoredEmailAddress = "james.buller@south-wales.police.uk"  # Email addresses to receive mailbox summary
 $FromAddress = "ICT Mailbox Notifications <ict-noreply@south-wales.police.uk>"
 $SMTPServer = "smtp-in.swp.police.uk"
-
-# UNLICENSED Email Template (40-50GB range)
-$UnlicensedEmailSubject = "Shared Mailbox Storage Warning - Unlicensed Limit Approaching"
-$UnlicensedEmailTemplate = @"
-FYI users of {DisplayName}
-
-We are writing to inform you that an unlicensed shared mailbox under your management is approaching its maximum storage limit of 50GB.
-
-Our records show that the shared mailbox '{DisplayName}' has reached {CurrentSize} of its 50GB unlicensed limit.
-
-Current Mailbox Statistics:
-- Mailbox: {DisplayName}
-- Email Address: {UPN}
-- Current Size: {CurrentSize}
-- Maximum Unlicensed Limit: 50 GB
-- Items in Mailbox: {ItemCount}
-- Deleted Items: {DeletedItemCount} ({DeletedItemSize})
-
-IMPORTANT: This mailbox will stop functioning when it reaches 50GB. Immediate action is required.
-
-You have two options to resolve this:
-1. Reduce the mailbox size below 40GB by removing old or unnecessary emails
-2. Request a license to increase the limit to 100GB
-
-Please look at the following document for steps to reduce mailbox size: <Link here>
-
-If the mailbox size is not reduced, it will be unable to send or receive new emails. We appreciate your urgent attention to this matter.
-
-If you have any questions or need assistance, please contact the ICT Service Desk:
-Telephone: x20888 / 01656 869505 - ICTServiceDesk@south-wales.police.uk
-
-Thank you for your cooperation.
-
-Best regards,
-
----
-This is an automated message. Please do not reply directly to this email.
-"@
 
 # LICENSED Email Template (85-100GB range)
 $LicensedEmailSubject = "Shared Mailbox Storage Warning - Licensed Limit Approaching"
 $LicensedEmailTemplate = @"
-FYI users of  {DisplayName}
+FYI users of {DisplayName}
 
-We are writing to inform you that a licensed shared mailbox under your management is approaching its maximum storage limit of 100GB.
+We are writing to inform you that this mailbox is approaching its maximum storage limit of 100GB.
 
-Our records show that the shared mailbox '{DisplayName}' has reached {CurrentSize} of its 100GB licensed limit.
+Our records show that the this mailbox '{DisplayName}' has reached {CurrentSize} of its 100GB licensed limit.
 
 Current Mailbox Statistics:
 - Mailbox: {DisplayName}
@@ -288,7 +248,9 @@ IMPORTANT: This mailbox will stop functioning when it reaches 100GB. Immediate a
 
 Please look at the following document for steps to reduce mailbox size: <Link here>
 
-If the mailbox size is not reduced, it will be unable to send or receive new emails. We appreciate your urgent attention to this matter. 
+If the mailbox size is not reduced, it will be unable to send or receive new emails. 
+
+We appreciate your urgent attention to this matter. 
 
 If you have any questions or need assistance, please contact the ICT Service Desk:
 Telephone: x20888 / 01656 869505 - ICTServiceDesk@south-wales.police.uk
@@ -385,7 +347,7 @@ This is an automated report generated on $(Get-Date -Format "dd/MM/yyyy HH:mm:ss
             Subject    = $summarySubject
             Body       = $summaryEmailBody
             SmtpServer = $SMTPServer
-            Priority   = "High"
+            Priority = 'High'
         }
         
         Send-MailMessage @summaryEmailParams
@@ -395,48 +357,11 @@ This is an automated report generated on $(Get-Date -Format "dd/MM/yyyy HH:mm:ss
     }
 }
 
-# Send Emails for UNLICENSED mailboxes
-if ($SendEmails -and $UnlicensedMailboxes.Count -gt 0) {
-
-    foreach ($mbx in $UnlicensedMailboxes) {
-
-        # Build personalised email body
-        $emailBody = $UnlicensedEmailTemplate -replace '{DisplayName}', $mbx.DisplayName `
-                                              -replace '{CurrentSize}', $mbx.CurrentSize `
-                                              -replace '{ItemCount}', $mbx.ItemCount `
-                                              -replace '{DeletedItemCount}', $mbx.DeletedItemCount `
-                                              -replace '{DeletedItemSize}', $mbx.DeletedItemSize `
-                                              -replace '{UPN}', $mbx.UPN
-
-        # Determine recipient - test account or shared mailbox address
-        $recipient = if ($TestMode) { $TestEmailAddress } else { $mbx.UPN }
-
-        # Modify subject in test mode
-        $subject = if ($TestMode) { "[TEST - Intended for: $($mbx.UPN)] $UnlicensedEmailSubject" } else { $UnlicensedEmailSubject }
-
-        try {
-            $emailParams = @{
-                From       = $FromAddress
-                To         = $recipient
-                Subject    = $subject
-                Body       = $emailBody
-                SmtpServer = $SMTPServer
-                Priority   = "High"
-            }
-
-            Send-MailMessage @emailParams
-        }
-        catch {
-            Write-Host "Failed to send email to: $recipient - $_" -ForegroundColor Red
-        }
-    }
-}
-
 # Send Emails for LICENSED mailboxes
 if ($SendEmails -and $LicensedMailboxes.Count -gt 0) {
 
     foreach ($mbx in $LicensedMailboxes) {
-
+        
         # Build personalised email body
         $emailBody = $LicensedEmailTemplate -replace '{DisplayName}', $mbx.DisplayName `
                                             -replace '{CurrentSize}', $mbx.CurrentSize `
@@ -444,13 +369,13 @@ if ($SendEmails -and $LicensedMailboxes.Count -gt 0) {
                                             -replace '{DeletedItemCount}', $mbx.DeletedItemCount `
                                             -replace '{DeletedItemSize}', $mbx.DeletedItemSize `
                                             -replace '{UPN}', $mbx.UPN
-
+        
         # Determine recipient - test account or shared mailbox address
         $recipient = if ($TestMode) { $TestEmailAddress } else { $mbx.UPN }
-
+        
         # Modify subject in test mode
         $subject = if ($TestMode) { "[TEST - Intended for: $($mbx.UPN)] $LicensedEmailSubject" } else { $LicensedEmailSubject }
-
+        
         try {
             $emailParams = @{
                 From       = $FromAddress
@@ -458,9 +383,9 @@ if ($SendEmails -and $LicensedMailboxes.Count -gt 0) {
                 Subject    = $subject
                 Body       = $emailBody
                 SmtpServer = $SMTPServer
-                Priority   = "High"
+                Priority = 'High'
             }
-
+            
             Send-MailMessage @emailParams
         }
         catch {
