@@ -29,3 +29,32 @@ Get-MailboxPermission -Identity "sharedmailbox@domain.com" | Where-Object { $_.A
 Get-InboxRule -Mailbox "user@domain.com" | Select Name, Enabled, Priority, From, SubjectContainsWords, MoveToFolder
 
 Get-InboxRule -Mailbox "user@domain.com" | Format-List Name, Description, Enabled, Priority, From, SentTo, SubjectContainsWords, MoveToFolder, RedirectTo, ForwardTo, DeleteMessage
+
+# Checking permissions accross the estate if a person is or has access to mailboxes and cal's
+
+# Part 1
+# Check if connected to Exchange Online
+try {
+    Get-EXOMailbox -ResultSize 1 -ErrorAction Stop | Out-Null
+    Write-Host "Connected to Exchange Online" -ForegroundColor Green
+}
+catch {
+    Write-Host "Not connected to Exchange Online. Connecting..." -ForegroundColor Yellow
+    Connect-ExchangeOnline
+}
+
+# Get the user email
+$UserEmail = Read-Host "Enter the user's email address"
+
+# Validate the user exists
+try {
+    $User = Get-EXOMailbox -Identity $UserEmail -ErrorAction Stop
+    Write-Host "`nFound user: $($User.DisplayName) ($($User.UserPrincipalName))" -ForegroundColor Green
+}
+catch {
+    Write-Host "User not found: $UserEmail" -ForegroundColor Red
+    exit
+}
+
+Write-Host "`nSearching for permissions... This may take a few minutes.`n" -ForegroundColor Cyan
+
