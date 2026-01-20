@@ -1,8 +1,25 @@
-<# Pull statistics for ALL mailboxes in one bulk call
-# Filter down to only those over 90GB
-# Get the detailed user info only for those few large mailboxes
-# One bulk statistics call instead of thousands of individual calls
-# Stores results in $LargeMailboxes for piping to email
+<#
+.SYNOPSIS
+    Monitors user mailbox sizes and sends alerts for mailboxes exceeding storage thresholds.
+
+.DESCRIPTION
+    Connects to Exchange Online and retrieves all user mailboxes in bulk.
+    Filters mailboxes exceeding the 90GB threshold.
+
+    For each mailbox over threshold, the script:
+      - Logs results to a file (C:\temp\MailboxSizeReport.log)
+      - Sends a summary email to the UC team with all flagged mailboxes
+      - Sends individual warning emails to users approaching their limit
+
+.OUTPUTS
+    $global:LargeMailboxes - Collection of user mailboxes over the 90GB threshold
+
+.NOTES
+    Requires: Exchange Online PowerShell module
+    Requires: Pre-configured environment variables for certificate-based authentication in Powershell Universal
+
+.EXAMPLE
+    .\Get-UserMailSizesOverThresholds.ps1
 #>
 
 # ============================================
