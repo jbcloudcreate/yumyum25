@@ -75,10 +75,6 @@ The script MUST include comment-based help with these headings:
 The script MUST output at minimum:
 - Summary counts (total objects read, changed objects, updated objects, skipped objects, failed objects).
 - A timestamped run log line using UK date format.
-- Optional export files (CSV/JSON) for:
-  - Changes detected (delta list)
-  - Actions performed
-  - Errors encountered
 
 ---
 
