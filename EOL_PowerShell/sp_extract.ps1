@@ -1,35 +1,30 @@
-# ===== CONFIG =====
-$siteUrl      = "https://southwalespolice-my.sharepoint.com/personal/geraint_morgan_south_wales_police_uk"
-$listTitle    = "PASF"   # Exact list name
+$siteUrl = "https://southwalespolice-my.sharepoint.com/personal/geraint_morgan_south_wales_police_uk"
+$listTitle = "PASF"
 $downloadPath = "C:\Temp\SPImages"
 
-# ===== SETUP =====
 New-Item -ItemType Directory -Path $downloadPath -Force | Out-Null
 
-Write-Host "Connecting to SharePoint..."
-$cred = Get-Credential
+# Create session
+$session = New-Object Microsoft.PowerShell.Commands.WebRequestSession
 
-# ===== GET ALL LIST ITEMS =====
-$itemsUrl = "$siteUrl/_api/web/lists/GetByTitle('$listTitle')/items?`$select=Id,Title,AttachmentFiles&`$expand=AttachmentFiles"
+# Trigger login via browser-style request
+Invoke-WebRequest -Uri $siteUrl -WebSession $session -UseDefaultCredentials
 
-$items = Invoke-RestMethod -Uri $itemsUrl -Credential $cred -Headers @{Accept="application/json;odata=verbose"}
+# Now call API using session cookies
+$itemsUrl = "$siteUrl/_api/web/lists/GetByTitle('$listTitle')/items?`$select=Id,AttachmentFiles&`$expand=AttachmentFiles"
 
-foreach ($item in $items.d.results) {
+$response = Invoke-RestMethod -Uri $itemsUrl -WebSession $session -Headers @{Accept="application/json;odata=verbose"}
 
-    if ($item.AttachmentFiles.results.Count -gt 0) {
+foreach ($item in $response.d.results) {
+    foreach ($attachment in $item.AttachmentFiles.results) {
 
-        foreach ($attachment in $item.AttachmentFiles.results) {
+        $fileUrl = $siteUrl + $attachment.ServerRelativeUrl
+        $fileName = $attachment.FileName
+        $outFile = Join-Path $downloadPath $fileName
 
-            $fileUrl = $siteUrl + $attachment.ServerRelativeUrl
-            $fileName = $attachment.FileName
-            $outFile = Join-Path $downloadPath $fileName
+        Write-Host "Downloading $fileName..."
 
-            Write-Host "Downloading $fileName..."
-
-            Invoke-WebRequest -Uri $fileUrl `
-                              -OutFile $outFile `
-                              -Credential $cred
-        }
+        Invoke-WebRequest -Uri $fileUrl -OutFile $outFile -WebSession $session
     }
 }
 
