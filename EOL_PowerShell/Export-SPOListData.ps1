@@ -97,8 +97,9 @@ param(
 $ErrorActionPreference = 'Stop'
 $ProgressPreference    = 'Continue'
 
-# Force TLS 1.2 for Azure AD and SharePoint Online connections
-[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+# NOTE: TLS 1.2 is the default on Windows 10/11 with .NET 4.6+
+# If you hit SSL/TLS errors, run this in a FullLanguage session first:
+#   [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
 # Normalise the site URL (remove trailing slash)
 $SiteUrl = $SiteUrl.TrimEnd('/')
