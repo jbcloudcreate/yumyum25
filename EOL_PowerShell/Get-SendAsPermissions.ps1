@@ -1,10 +1,6 @@
 <#
 .SYNOPSIS
-    Exports 'Send As' permissions for a specified mailbox to a text file.
-
-.DESCRIPTION
-    Retrieves all trustees granted 'Send As' permission on the target mailbox
-    and writes the results to a plain text file.
+    Exports a flat list of 'Send As' trustees for a specified mailbox to a text file.
 
 .PARAMETER Mailbox
     The UPN, alias, display name, or email address of the target mailbox.
@@ -28,34 +24,19 @@ param (
 
 Write-Host "Querying Send As permissions for: $Mailbox" -ForegroundColor Cyan
 
-# Retrieve Send As permissions — exclude the system 'NT AUTHORITY\SELF' entry
-$sendAsPerms = Get-RecipientPermission -Identity $Mailbox |
-    Where-Object { $_.Trustee -notlike "NT AUTHORITY\SELF" }
+$trustees = Get-RecipientPermission -Identity $Mailbox |
+    Where-Object {
+        $_.Trustee -notlike "NT AUTHORITY\SELF" -and
+        $_.Trustee -notmatch '^S-1-5-'
+    } |
+    Select-Object -ExpandProperty Trustee
 
-if (-not $sendAsPerms) {
+if (-not $trustees) {
     Write-Host "No Send As permissions found for '$Mailbox'." -ForegroundColor Yellow
     exit
 }
 
-# Build output content
-$lines = @()
-$lines += "Send As Permissions Report"
-$lines += "=========================="
-$lines += "Mailbox   : $Mailbox"
-$lines += "Generated : $(Get-Date -Format 'dd/MM/yyyy HH:mm')"
-$lines += ""
-$lines += "{0,-40} {1,-30} {2}" -f "Trustee", "Access Rights", "Inherited"
-$lines += "{0,-40} {1,-30} {2}" -f "-------", "-------------", "---------"
+# Write flat list to file
+$trustees | Out-File -FilePath $OutputPath -Encoding UTF8
 
-foreach ($perm in $sendAsPerms) {
-    $lines += "{0,-40} {1,-30} {2}" -f $perm.Trustee, ($perm.AccessRights -join ", "), $perm.IsInherited
-}
-
-$lines += ""
-$lines += "Total entries: $($sendAsPerms.Count)"
-
-# Write to file
-$lines | Out-File -FilePath $OutputPath -Encoding UTF8
-
-Write-Host "Done. $($sendAsPerms.Count) trustee(s) found." -ForegroundColor Green
-Write-Host "Output written to: $OutputPath" -ForegroundColor Green
+Write-Host "Done. $($trustees.Count) trustee(s) written to: $OutputPath" -ForegroundColor Green
