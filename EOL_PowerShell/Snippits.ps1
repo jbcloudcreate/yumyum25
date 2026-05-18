@@ -1,5 +1,7 @@
 b6Mmmd88Le66H$kIDg
 
+33D9E9904F42CA9D8009B663F56F3303C6AAFA5F
+
 # Verify the mailbox
 Get-Mailbox -Identity "sharedmailbox@domain.com"
 
