@@ -1,3 +1,5 @@
+b6Mmmd88Le66H$kIDg
+
 # Verify the mailbox
 Get-Mailbox -Identity "sharedmailbox@domain.com"
 
