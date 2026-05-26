@@ -1,9 +1,21 @@
 # Get-AllFolderPermissions.ps1
 # Returns folder permissions for every folder in a shared mailbox
+# Optionally filter by a specific user
+
+# All users
+#.\Get-AllFolderPermissions.ps1 -Mailbox "sharedmailbox@swp.police.uk"
+
+# Specific user
+#.\Get-AllFolderPermissions.ps1 -Mailbox "sharedmailbox@swp.police.uk" -User "Jones,David"
+
+#.\Get-AllFolderPermissions.ps1 -Mailbox "sharedmailbox@swp.police.uk" -User "david.jones@swp.police.uk"
 
 param (
     [Parameter(Mandatory = $true)]
-    [string]$Mailbox
+    [string]$Mailbox,
+
+    [Parameter(Mandatory = $false)]
+    [string]$User
 )
 
 $permMap = @{
@@ -33,13 +45,18 @@ foreach ($folderPath in $folders) {
     try {
         $perms = Get-MailboxFolderPermission -Identity $identity -ErrorAction Stop
 
+        # Filter by email address if param was supplied
+        if ($User) {
+            $perms = $perms | Where-Object { $_.User.ADRecipient.PrimarySmtpAddress -like "*$User*" }
+        }
+
         foreach ($perm in $perms) {
             $rights = $perm.AccessRights -join ', '
             $level  = if ($permMap.ContainsKey($rights)) { $permMap[$rights] } else { $rights }
 
             $results += [PSCustomObject]@{
                 Folder             = $folderPath
-                User               = $perm.User.DisplayName
+                User               = $perm.User.ADRecipient.PrimarySmtpAddress
                 'Permission Level' = $level
                 AccessRights       = $rights
             }
