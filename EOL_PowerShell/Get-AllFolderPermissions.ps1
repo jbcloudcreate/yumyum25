@@ -18,15 +18,16 @@ $permMap = @{
     'None'             = 'None'
 }
 
+$excludeFolders = @('Yammer', 'Tasks', 'Notes', 'Junk Email', 'Outbox')
+
 $results = @()
 
-# Get all folders in the mailbox
 $folders = Get-MailboxFolderStatistics -Identity $Mailbox |
+    Where-Object { $excludeFolders -notcontains $_.Name } |
     Select-Object -ExpandProperty FolderPath
 
 foreach ($folderPath in $folders) {
 
-    # Convert path format: /Inbox/Subfolder -> Mailbox:\Inbox\Subfolder
     $identity = $Mailbox + ":" + $folderPath.Replace("/", "\")
 
     try {
@@ -45,13 +46,10 @@ foreach ($folderPath in $folders) {
         }
     }
     catch {
-        # Some system folders reject the query — silently skip them
         Write-Verbose "Skipped: $identity — $($_.Exception.Message)"
     }
 }
 
-# Output to screen
 $results | Format-Table -AutoSize
 
-# Optional: export to CSV
 # $results | Export-Csv -Path ".\MailboxFolderPermissions.csv" -NoTypeInformation
