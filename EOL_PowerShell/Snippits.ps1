@@ -11,7 +11,6 @@ Get-RecoverableItems -Identity "emma.white@south-wales.police.uk" -FilterItemTyp
 Get-RecoverableItems -Identity "emma.white@south-wales.police.uk" -FilterItemType IPM.Note -ResultSize Unlimited | Where-Object {$_.Subject -like "*25.02.26 SNPT Victims Board*"} | Select Subject, LastParentFolderName, FolderDisplayPath | Format-Table -AutoSize
 
 Get-RecoverableItems -Identity "emma.white@south-wales.police.uk" -FilterItemType IPM.Note -ResultSize Unlimited | Where-Object {
-    $_.LastModifiedTime -ge "2026-01-05" -and (
         $_.Subject -like "*MRG*" -or
         $_.Subject -like "*Victims*" -or
         $_.Subject -like "*Citizen First*" -or
@@ -39,7 +38,6 @@ Get-RecoverableItems -Identity "emma.white@south-wales.police.uk" -FilterItemTyp
         $_.SenderAddress -like "*jay.davies*" -or
         $_.SenderAddress -like "*rhys.gronow*" -or
         $_.SenderAddress -like "*matthew.lewis*"
-    )
 } | Measure-Object
 
 # Verify the mailbox
