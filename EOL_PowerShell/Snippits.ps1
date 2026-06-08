@@ -10,9 +10,37 @@ Get-RecoverableItems -Identity "emma.white@south-wales.police.uk" -FilterItemTyp
 
 Get-RecoverableItems -Identity "emma.white@south-wales.police.uk" -FilterItemType IPM.Note -ResultSize Unlimited | Where-Object {$_.Subject -like "*25.02.26 SNPT Victims Board*"} | Select Subject, LastParentFolderName, FolderDisplayPath | Format-Table -AutoSize
 
-b6Mmmd88Le66H$kIDg
-
-33D9E9904F42CA9D8009B663F56F3303C6AAFA5F
+Get-RecoverableItems -Identity "emma.white@south-wales.police.uk" -FilterItemType IPM.Note -ResultSize Unlimited | Where-Object {
+    $_.LastModifiedTime -ge "2026-01-05" -and (
+        $_.Subject -like "*MRG*" -or
+        $_.Subject -like "*Victims*" -or
+        $_.Subject -like "*Citizen First*" -or
+        $_.Subject -like "*UOPP*" -or
+        $_.Subject -like "*Use of Police Powers*" -or
+        $_.Subject -like "*SMT*" -or
+        $_.Subject -like "*FL1*" -or
+        $_.Subject -like "*Peoples Board*" -or
+        $_.Subject -like "*Sickness*" -or
+        $_.Subject -like "*Resources*" -or
+        $_.Subject -like "*Performance*" -or
+        $_.Subject -like "*EDI*" -or
+        $_.Subject -like "*Future Events*" -or
+        $_.Subject -like "*Missing*" -or
+        $_.Subject -like "*TAC*" -or
+        $_.Subject -like "*Taser*" -or
+        $_.Subject -like "*Agenda*" -or
+        $_.Subject -like "*Presentation*" -or
+        $_.Subject -like "*PowerPoint*" -or
+        $_.Subject -like "*Spreadsheet*" -or
+        $_.SenderAddress -like "*samantha.lewis*" -or
+        $_.SenderAddress -like "*fiona.lewis*" -or
+        $_.SenderAddress -like "*caitlin.may*" -or
+        $_.SenderAddress -like "*fiona.hide*" -or
+        $_.SenderAddress -like "*jay.davies*" -or
+        $_.SenderAddress -like "*rhys.gronow*" -or
+        $_.SenderAddress -like "*matthew.lewis*"
+    )
+} | Measure-Object
 
 # Verify the mailbox
 Get-Mailbox -Identity "sharedmailbox@domain.com"
