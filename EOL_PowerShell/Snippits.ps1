@@ -4,6 +4,8 @@ Get-RecoverableItems -Identity "emma.white@south-wales.police.uk" -FilterItemTyp
 
 Get-RecoverableItems -Identity "emma.white@south-wales.police.uk" -FilterItemType IPM.Note -ResultSize Unlimited | Where-Object {$_.DeletedTime -ge "2026-06-04 15:14" -and $_.DeletedTime -le "2026-06-04 15:20"} | Measure-Object
 
+Get-RecoverableItems -Identity "emma.white@south-wales.police.uk" -FilterItemType IPM.Note -ResultSize Unlimited | Measure-Object
+
 b6Mmmd88Le66H$kIDg
 
 33D9E9904F42CA9D8009B663F56F3303C6AAFA5F
