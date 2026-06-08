@@ -10,6 +10,8 @@ Get-RecoverableItems -Identity "emma.white@south-wales.police.uk" -FilterItemTyp
 
 Get-RecoverableItems -Identity "emma.white@south-wales.police.uk" -FilterItemType IPM.Note -ResultSize Unlimited | Where-Object {$_.Subject -like "*25.02.26 SNPT Victims Board*"} | Select Subject, LastParentFolderName, FolderDisplayPath | Format-Table -AutoSize
 
+Get-MailboxFolder -Identity "emma.white@south-wales.police.uk:\SNPT Recovery" | Select Name, FolderPath, FolderId
+
 Get-RecoverableItems -Identity "emma.white@south-wales.police.uk" -FilterItemType IPM.Note -ResultSize Unlimited | Where-Object {
         $_.Subject -like "*MRG*" -or
         $_.Subject -like "*Victims*" -or
