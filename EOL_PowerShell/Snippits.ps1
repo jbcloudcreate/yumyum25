@@ -1,5 +1,35 @@
 Get-RecoverableItems -Identity "emma.white@south-wales.police.uk" -FilterItemType IPM.Note -ResultSize Unlimited | Where-Object {$_.DeletedTime -ge "2026-06-03 15:00" -and $_.DeletedTime -le "2026-06-05 15:00"} | Select Subject, FolderDisplayPath, LastParentFolderName, DeletedTime | Sort-Object DeletedTime | Format-Table -AutoSize
 
+Get-RecoverableItems -Identity "emma.white@south-wales.police.uk" -FilterItemType IPM.Note -ResultSize Unlimited | Where-Object {
+        $_.Subject -like "*MRG*" -or
+        $_.Subject -like "*Victims*" -or
+        $_.Subject -like "*Citizen First*" -or
+        $_.Subject -like "*UOPP*" -or
+        $_.Subject -like "*Use of Police Powers*" -or
+        $_.Subject -like "*SMT*" -or
+        $_.Subject -like "*FL1*" -or
+        $_.Subject -like "*Peoples Board*" -or
+        $_.Subject -like "*Sickness*" -or
+        $_.Subject -like "*Resources*" -or
+        $_.Subject -like "*Performance*" -or
+        $_.Subject -like "*EDI*" -or
+        $_.Subject -like "*Future Events*" -or
+        $_.Subject -like "*Missing*" -or
+        $_.Subject -like "*TAC*" -or
+        $_.Subject -like "*Taser*" -or
+        $_.Subject -like "*Agenda*" -or
+        $_.Subject -like "*Presentation*" -or
+        $_.Subject -like "*PowerPoint*" -or
+        $_.Subject -like "*Spreadsheet*" -or
+        $_.SenderAddress -like "*samantha.lewis*" -or
+        $_.SenderAddress -like "*fiona.lewis*" -or
+        $_.SenderAddress -like "*caitlin.may*" -or
+        $_.SenderAddress -like "*fiona.hide*" -or
+        $_.SenderAddress -like "*jay.davies*" -or
+        $_.SenderAddress -like "*rhys.gronow*" -or
+        $_.SenderAddress -like "*matthew.lewis*"
+} | Restore-RecoverableItems -Identity "emma.white@south-wales.police.uk" -RestoreTargetFolder "Inbox\SNPT Recovery"
+
 Get-RecoverableItems -Identity "emma.white@south-wales.police.uk" -FilterItemType IPM.Note -ResultSize Unlimited | Where-Object {$_.Subject -like "*Victims Board*"} | Select Subject, FolderDisplayPath, LastParentFolderName, DeletedTime | Sort-Object DeletedTime | Format-Table -AutoSize
 
 Get-RecoverableItems -Identity "emma.white@south-wales.police.uk" -FilterItemType IPM.Note -ResultSize Unlimited | Where-Object {$_.DeletedTime -ge "2026-06-04 15:14" -and $_.DeletedTime -le "2026-06-04 15:20"} | Measure-Object
