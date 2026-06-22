@@ -1,5 +1,7 @@
 Get-RecoverableItems -Identity "emma.white@south-wales.police.uk" -FilterItemType IPM.Note -ResultSize Unlimited | Where-Object {$_.DeletedTime -ge "2026-06-03 15:00" -and $_.DeletedTime -le "2026-06-05 15:00"} | Select Subject, FolderDisplayPath, LastParentFolderName, DeletedTime | Sort-Object DeletedTime | Format-Table -AutoSize
 
+Get-MailboxFolderPermission -Identity "sharedmailbox@domain.com:\FolderName" -User "user@domain.com"
+
 Get-RecoverableItems -Identity "emma.white@south-wales.police.uk" -FilterItemType IPM.Note -ResultSize Unlimited | Where-Object {
         $_.Subject -like "*MRG*" -or
         $_.Subject -like "*Victims*" -or
