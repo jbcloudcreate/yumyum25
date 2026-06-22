@@ -2,6 +2,8 @@ Get-RecoverableItems -Identity "emma.white@south-wales.police.uk" -FilterItemTyp
 
 Get-MailboxFolderPermission -Identity "sharedmailbox@domain.com:\FolderName" -User "user@domain.com"
 
+Get-MailboxFolderStatistics -Identity "sharedmailbox@domain.com" | Select-Object Name, FolderPath
+
 Get-RecoverableItems -Identity "emma.white@south-wales.police.uk" -FilterItemType IPM.Note -ResultSize Unlimited | Where-Object {
         $_.Subject -like "*MRG*" -or
         $_.Subject -like "*Victims*" -or
