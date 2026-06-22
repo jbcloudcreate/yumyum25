@@ -4,6 +4,15 @@ Get-MailboxFolderPermission -Identity "sharedmailbox@domain.com:\FolderName" -Us
 
 Get-MailboxFolderStatistics -Identity "sharedmailbox@domain.com" | Select-Object Name, FolderPath
 
+Get-MailboxFolderStatistics -Identity "CTPWALESCAT0@south-wales.police.uk" | 
+Where-Object { $_.FolderPath -like "/Inbox/*" } | 
+ForEach-Object {
+    $folder = "CTPWALESCAT0@south-wales.police.uk:" + $_.FolderPath.Replace("/", "\")
+    Get-MailboxFolderPermission -Identity $folder | 
+    Where-Object { $_.User -notlike "Default" -and $_.User -notlike "Anonymous" } |
+    Select-Object @{N="Folder";E={$_.Identity}}, User, AccessRights
+}
+
 Get-RecoverableItems -Identity "emma.white@south-wales.police.uk" -FilterItemType IPM.Note -ResultSize Unlimited | Where-Object {
         $_.Subject -like "*MRG*" -or
         $_.Subject -like "*Victims*" -or
