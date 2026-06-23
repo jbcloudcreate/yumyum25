@@ -4,15 +4,6 @@ Get-MailboxFolderPermission -Identity "sharedmailbox@domain.com:\FolderName" -Us
 
 Get-MailboxFolderStatistics -Identity "sharedmailbox@domain.com" | Select-Object Name, FolderPath
 
-Get-MailboxFolderStatistics -Identity "CTPWALESCAT0@south-wales.police.uk" | 
-Where-Object { $_.FolderPath -like "/Inbox/*" } | 
-ForEach-Object {
-    $folder = "CTPWALESCAT0@south-wales.police.uk:" + $_.FolderPath.Replace("/", "\")
-    Get-MailboxFolderPermission -Identity $folder | 
-    Where-Object { $_.User -notlike "Default" -and $_.User -notlike "Anonymous" } |
-    Select-Object @{N="Folder";E={$_.Identity}}, User, AccessRights
-}
-
 # Verify the mailbox
 Get-Mailbox -Identity "sharedmailbox@domain.com"
 
@@ -98,27 +89,3 @@ foreach ($Mailbox in $AllMailboxes) {
 }
 
 Write-Host "Full Access check complete.`n" -ForegroundColor Green
-
-$mailbox = "CTPWALESCAT0@south-wales.police.uk"
-$users = @("erin.church@south-wales.police.uk", "kirsten.parry@south-wales.police.uk")
-
-$folders = @(
-    "\Inbox",
-    "\Inbox\S189",
-    "\Inbox\GENERAL",
-    "\Inbox\INTEL",
-    "\Inbox\NSST",
-    "\Inbox\OPERATIONAL",
-    "\Inbox\WM CaTO ON CALL",
-    "\Sent Items"
-)
-
-# --- DRY RUN --- Check current permissions before making changes
-Write-Host "=== CURRENT PERMISSIONS (Before) ===" -ForegroundColor Cyan
-foreach ($user in $users) {
-    foreach ($folder in $folders) {
-        $identity = "$mailbox" + ":" + "$folder"
-        Get-MailboxFolderPermission -Identity $identity -User $user |
-        Select-Object @{N="Folder";E={$folder}}, User, AccessRights
-    }
-}
