@@ -98,3 +98,27 @@ foreach ($Mailbox in $AllMailboxes) {
 }
 
 Write-Host "Full Access check complete.`n" -ForegroundColor Green
+
+$mailbox = "CTPWALESCAT0@south-wales.police.uk"
+$users = @("erin.church@south-wales.police.uk", "kirsten.parry@south-wales.police.uk")
+
+$folders = @(
+    "\Inbox",
+    "\Inbox\S189",
+    "\Inbox\GENERAL",
+    "\Inbox\INTEL",
+    "\Inbox\NSST",
+    "\Inbox\OPERATIONAL",
+    "\Inbox\WM CaTO ON CALL",
+    "\Sent Items"
+)
+
+# --- DRY RUN --- Check current permissions before making changes
+Write-Host "=== CURRENT PERMISSIONS (Before) ===" -ForegroundColor Cyan
+foreach ($user in $users) {
+    foreach ($folder in $folders) {
+        $identity = "$mailbox" + ":" + "$folder"
+        Get-MailboxFolderPermission -Identity $identity -User $user |
+        Select-Object @{N="Folder";E={$folder}}, User, AccessRights
+    }
+}
