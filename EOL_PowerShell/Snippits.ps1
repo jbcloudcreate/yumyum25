@@ -4,6 +4,11 @@ Get-MailboxFolderPermission -Identity "sharedmailbox@domain.com:\FolderName" -Us
 
 Get-MailboxFolderStatistics -Identity "sharedmailbox@domain.com" | Select-Object Name, FolderPath
 
+Get-Service MSExchangeHM, MSExchangeHMRecovery -ComputerName SWPHQ-MBS03
+
+Get-ServerHealth -Identity SWPHQ-MBS03 | Where-Object {$_.AlertValue -eq "Unhealthy"}
+Get-HealthReport -Identity SWPHQ-MBS03 | Where-Object {$_.State -ne "Online" -or $_.HealthSetName -like "*HM*"}
+
 # Verify the mailbox
 Get-Mailbox -Identity "sharedmailbox@domain.com"
 
