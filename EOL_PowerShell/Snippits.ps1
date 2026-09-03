@@ -19,6 +19,20 @@ Get-LocalGroupMember -Group Administrators
 Step 4 - Check Reboot on DAGWIT
 Get-CimInstance Win32_OperatingSystem | select LastBootUpTime
 
+Witness server SWPHQ-DAGWIT1 rebooted 01/09 22:13–22:15 under scheduled SCCM patching (event 1074, CcmExec then TrustedInstaller, both logged as planned). Cluster briefly lost file share witness arbitration during the reboot window, generating the SCOM alert at 22:14:48. Witness re-arbitrated automatically on the server returning at 22:15:08.
+
+Verified 03/09 — all checks passed, no issues found:
+
+Connectivity to swphq-dagwit1.swp-rest.police.int on TCP 445 from SWPHQ-MBS02 successful (TcpTestSucceeded = True, 10.20.242.39 → 10.20.242.48)
+DNS resolution correct
+File Share Witness cluster resource State = Online, owner Cluster Group
+Quorum type Majority, quorum resource File Share Witness
+WitnessShareInUse = Primary
+All three DAG nodes (SWPHQ-MBS01/02/03) Up and listed as OperationalServers
+Exchange Trusted Subsystem present in local Administrators on the witness server
+
+No remediation required — closing as transient/expected, caused by planned patching.
+
 # Clean shutdown / startup / unexpected
 Get-WinEvent -FilterHashtable @{LogName='System'; ID=1074,6005,6006,6008,41} -MaxEvents 20 |
   ft TimeCreated,Id,Message -Wrap
