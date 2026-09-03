@@ -1,3 +1,23 @@
+Step 1 — establish current state (all read-only):
+# From an Exchange server
+Get-DatabaseAvailabilityGroup -Identity <DAGName> -Status | fl Name,Servers,
+  WitnessServer,WitnessDirectory,AlternateWitnessServer,
+  WitnessShareInUse,OperationalServers,StartedMailboxServers,StoppedMailboxServers
+
+# Cluster view
+Get-ClusterResource | ? ResourceType -eq 'File Share Witness' | fl *
+Get-ClusterQuorum
+
+Step 2 — connectivity and share:
+Test-NetConnection swphq-dagwit1.swp-rest.police.int -Port 445
+Resolve-DnsName swphq-dagwit1.swp-rest.police.int
+Test-Path "\\swphq-dagwit1.swp-rest.police.int\SWPEX-MBSDAG.swp-rest.police.int"
+
+Step 3 — the usual culprit. Nine times out of ten it's Exchange Trusted Subsystem no longer being in the local Administrators group on the witness server. Rebuilds, hardening baselines, and GPO-restricted-group policies all strip it. Check on swphq-dagwit1:
+Get-LocalGroupMember -Group Administrators
+
+Also check the System and FailoverClustering event logs on MBS02 around 22:14 on 01/09 for events 1562, 1069, or 1564 — those give the underlying failure reason.
+
 Get-ADGroupMember -Identity "SignageFeedUsers" -Server swp.police.int | Select-Object Name, SamAccountName
 
 Add-ADGroupMember -Identity "SignageFeedUsers" -Server swp.police.int -Members "swp59639a"
