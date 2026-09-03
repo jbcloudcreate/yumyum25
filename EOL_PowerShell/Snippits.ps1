@@ -16,6 +16,13 @@ Test-Path "\\swphq-dagwit1.swp-rest.police.int\SWPEX-MBSDAG.swp-rest.police.int"
 Step 3 — the usual culprit. Nine times out of ten it's Exchange Trusted Subsystem no longer being in the local Administrators group on the witness server. Rebuilds, hardening baselines, and GPO-restricted-group policies all strip it. Check on swphq-dagwit1:
 Get-LocalGroupMember -Group Administrators
 
+Step 4 - Check Reboot on DAGWIT
+Get-CimInstance Win32_OperatingSystem | select LastBootUpTime
+
+# Clean shutdown / startup / unexpected
+Get-WinEvent -FilterHashtable @{LogName='System'; ID=1074,6005,6006,6008,41} -MaxEvents 20 |
+  ft TimeCreated,Id,Message -Wrap
+
 Also check the System and FailoverClustering event logs on MBS02 around 22:14 on 01/09 for events 1562, 1069, or 1564 — those give the underlying failure reason.
 
 Get-ADGroupMember -Identity "SignageFeedUsers" -Server swp.police.int | Select-Object Name, SamAccountName
