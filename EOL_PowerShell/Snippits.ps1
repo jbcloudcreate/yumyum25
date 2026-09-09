@@ -1,3 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<configuration>
+  <location path="." inheritInChildApplications="false">
+    <system.webServer>
+      <handlers>
+        <add name="aspNetCore" path="*" verb="*" modules="AspNetCoreModuleV2" resourceType="Unspecified" />
+      </handlers>
+      <aspNetCore processPath="dotnet" arguments=".\SignageFeedAdmin.dll" stdoutLogEnabled="false" stdoutLogFile=".\logs\stdout" hostingModel="inprocess" forwardWindowsAuthToken="true" />
+    </system.webServer>
+  </location>
+  <location path="feeds">
+    <system.webServer>
+      <handlers>
+        <add name="aspNetCore" path="*" verb="*" modules="AspNetCoreModuleV2" resourceType="Unspecified" />
+      </handlers>
+      <security>
+        <authentication>
+          <anonymousAuthentication enabled="true" />
+        </authentication>
+      </security>
+    </system.webServer>
+  </location>
+</configuration>
+
 Test-Path "C:\inetpub\SignageFeedAdmin\publish\wwwroot\feeds\rss\main.xml"
 Get-Item "C:\inetpub\SignageFeedAdmin\publish\wwwroot\feeds\rss\main.xml" | Select-Object LastWriteTime, Length
 
