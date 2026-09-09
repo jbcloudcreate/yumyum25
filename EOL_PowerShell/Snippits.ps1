@@ -1,3 +1,6 @@
+Test-Path "C:\inetpub\SignageFeedAdmin\publish\wwwroot\feeds\rss\main.xml"
+Get-Item "C:\inetpub\SignageFeedAdmin\publish\wwwroot\feeds\rss\main.xml" | Select-Object LastWriteTime, Length
+
 %windir%\system32\inetsrv\appcmd.exe unlock config -section:system.webServer/security/authentication/anonymousAuthentication
 
 & "$env:windir\system32\inetsrv\appcmd.exe" unlock config -section:system.webServer/security/authentication/anonymousAuthentication
