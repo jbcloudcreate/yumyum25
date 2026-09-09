@@ -1,5 +1,7 @@
 %windir%\system32\inetsrv\appcmd.exe unlock config -section:system.webServer/security/authentication/anonymousAuthentication
 
+& "$env:windir\system32\inetsrv\appcmd.exe" unlock config -section:system.webServer/security/authentication/anonymousAuthentication
+
 Step 1 — establish current state (all read-only):
 # From an Exchange server
 Get-DatabaseAvailabilityGroup -Identity <DAGName> -Status | fl Name,Servers,
