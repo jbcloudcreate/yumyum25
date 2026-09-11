@@ -5,5 +5,7 @@ Get-WebConfiguration -PSPath "MACHINE/WEBROOT/APPHOST" `
 appcmd set config /section:anonymousAuthentication /overrideMode:Deny
 appcmd set config "Default Web Site/signageadmin" /section:anonymousAuthentication /overrideMode:Allow
 
+TEST
+
 Stop-Website -Name "Signagefeedadmin"
 Stop-Website -Name "SWPICTSignageFeedHub"
