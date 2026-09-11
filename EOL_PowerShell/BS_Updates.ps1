@@ -51,9 +51,5 @@ $c = [Net.Sockets.TcpClient]::new($h, 443)
 $s = [Net.Security.SslStream]::new($c.GetStream(), $false, { $true })
 $s.AuthenticateAsClient($h)
 [Security.Cryptography.X509Certificates.X509Certificate2]::new($s.RemoteCertificate) |
-  Format-List Subject, NotBefore, NotAfter, Thumbprint
+  Format-List Subject, NotAfter, Thumbprint
 $s.Dispose(); $c.Dispose()
-
-Get-ChildItem Cert:\LocalMachine -Recurse -ErrorAction SilentlyContinue |
-  Where-Object { $_.Thumbprint -eq '9BA2B2B70ECB24041D3A97DCE93A156CBC162A57' } |
-  Select-Object PSParentPath, Subject, NotAfter
