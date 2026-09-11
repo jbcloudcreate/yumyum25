@@ -45,3 +45,11 @@ Get-ChildItem Cert:\LocalMachine -Recurse -ErrorAction SilentlyContinue |
 
 Get-WinEvent -FilterHashtable @{LogName='System'; ProviderName='Schannel'; Id=36874} -MaxEvents 200 |
   Group-Object { $_.TimeCreated.Date } | Select-Object Name, Count
+
+$h = 'swpdev-ictweb.swp-rest.police.int'
+$c = [Net.Sockets.TcpClient]::new($h, 443)
+$s = [Net.Security.SslStream]::new($c.GetStream(), $false, { $true })
+$s.AuthenticateAsClient($h)
+[Security.Cryptography.X509Certificates.X509Certificate2]::new($s.RemoteCertificate) |
+  Format-List Subject, NotBefore, NotAfter, Thumbprint
+$s.Dispose(); $c.Dispose()
