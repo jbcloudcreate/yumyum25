@@ -4,3 +4,5 @@ Get-ChildItem Cert:\LocalMachine\My |
 
 Resolve-DnsName swpdev-ictweb.swp-rest.police.int
 
+Get-WebBinding | Select-Object protocol, bindingInformation, ItemXPath
+netsh http show sslcert
