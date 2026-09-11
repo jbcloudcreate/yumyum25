@@ -30,3 +30,18 @@ https://swpdev-ictweb.swp-rest.police.int/UserManagement
 
 Get-WinEvent -FilterHashtable @{LogName='System'; ProviderName='Schannel'} -MaxEvents 20 |
   Format-List TimeCreated, Id, Message
+
+$h = 'swpdev-ictweb.swp-rest.police.int'
+$c = [Net.Sockets.TcpClient]::new($h, 443)
+$s = [Net.Security.SslStream]::new($c.GetStream(), $false, { $true })
+$s.AuthenticateAsClient($h)
+$s.RemoteCertificate | Format-List Subject, Issuer, NotBefore, NotAfter, Thumbprint
+$s.Dispose(); $c.Dispose()
+
+$tp = 'F07598B26011CE01C99E492AE62DD2EAC24875B7'
+Get-ChildItem Cert:\LocalMachine -Recurse -ErrorAction SilentlyContinue |
+  Where-Object { $_.Thumbprint -eq $tp } |
+  Select-Object PSParentPath, Subject, NotAfter
+
+Get-WinEvent -FilterHashtable @{LogName='System'; ProviderName='Schannel'; Id=36874} -MaxEvents 200 |
+  Group-Object { $_.TimeCreated.Date } | Select-Object Name, Count
