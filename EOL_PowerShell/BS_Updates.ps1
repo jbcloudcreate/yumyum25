@@ -109,3 +109,11 @@ icacls "C:\inetpub\SignageFeedAdmin\publish\wwwroot\feeds" /grant "IIS AppPool\S
 Get-WebApplication -Site "Default Web Site" -Name "signageadmin" | Format-List Path, ApplicationPool
 
 
+Get-WinEvent -FilterHashtable @{LogName='Application'; ProviderName='IIS AspNetCore Module V2'} -MaxEvents 5 |
+  Format-List TimeCreated, Id, Message
+
+Get-ChildItem C:\inetpub\logs\LogFiles\W3SVC1\*.log |
+  Sort-Object LastWriteTime -Descending |
+  Select-Object -First 1 |
+  Get-Content | Select-String '<player-ip>' | Select-Object -Last 20
+
