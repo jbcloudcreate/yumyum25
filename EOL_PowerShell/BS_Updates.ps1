@@ -13,3 +13,7 @@ Get-ChildItem Cert:\LocalMachine\My |
 
 Get-Website | Select-Object Name, State, PhysicalPath
 Get-WebApplication
+
+Get-ChildItem Cert:\LocalMachine -Recurse |
+  Where-Object { $_.Thumbprint -eq 'F07598B26011CE01C99E492AE62DD2EAC24875B7' } |
+  Format-List PSParentPath, Subject, DnsNameList, NotAfter
