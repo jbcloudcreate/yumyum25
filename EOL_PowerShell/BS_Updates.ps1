@@ -74,5 +74,27 @@ And the application's own errors:
 Get-WinEvent -FilterHashtable @{LogName='Application'; ProviderName='IIS AspNetCore Module V2'} -MaxEvents 10 |
   Format-List TimeCreated, Id, Message
 
+Set-WebConfigurationProperty -PSPath "IIS:\" -Location "Default Web Site/signageadmin" `
+  -Filter "/system.webServer/security/authentication/anonymousAuthentication" `
+  -Name enabled -Value $false
+
+The decisive evidence
+
+503 has sub-status codes, and they point at completely different causes. The HTTPERR log gives it plainest:
+
+Get-ChildItem C:\Windows\System32\LogFiles\HTTPERR\*.log |
+  Sort-Object LastWriteTime -Descending |
+  Select-Object -First 1 |
+  Get-Content -Tail 30
+
+And the IIS log for Default Web Site (W3SVC1, not W3SVC2 as before):
+
+Get-ChildItem C:\inetpub\logs\LogFiles\W3SVC1\*.log |
+  Sort-Object LastWriteTime -Descending |
+  Select-Object -First 1 |
+  Get-Content | Select-String 'signageadmin' | Select-Object -Last 10
+
+Get-ChildItem C:\inetpub\SignageFeedAdmin\publish\app_offline* -ErrorAction SilentlyContinue
+
 
 
