@@ -58,3 +58,21 @@ Then stop and test
 https://swpdev-ictweb.swp-rest.police.int/feedhub/
 https://swpdev-ictweb.swp-rest.police.int/signageadmin
 
+Import-Module WebAdministration
+Get-WebAppPoolState -Name "SignageFeedAdmin"
+Get-ChildItem IIS:\AppPools\SignageFeedAdmin | Select-Object Name, State
+
+If it reads Stopped, that's the answer.
+
+Then get the reason rather than guessing — the System log records why the pool stopped:
+
+Get-WinEvent -FilterHashtable @{LogName='System'; ProviderName='Microsoft-Windows-WAS'} -MaxEvents 10 |
+  Format-List TimeCreated, Id, Message
+
+And the application's own errors:
+
+Get-WinEvent -FilterHashtable @{LogName='Application'; ProviderName='IIS AspNetCore Module V2'} -MaxEvents 10 |
+  Format-List TimeCreated, Id, Message
+
+
+
