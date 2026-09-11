@@ -97,4 +97,15 @@ Get-ChildItem C:\inetpub\logs\LogFiles\W3SVC1\*.log |
 Get-ChildItem C:\inetpub\SignageFeedAdmin\publish\app_offline* -ErrorAction SilentlyContinue
 
 
+New-WebAppPool -Name "SignageAdminApp"
+Set-ItemProperty IIS:\AppPools\SignageAdminApp -Name managedRuntimeVersion -Value ""
+
+Set-ItemProperty "IIS:\Sites\Default Web Site\signageadmin" `
+  -Name applicationPool -Value "SignageAdminApp"
+
+icacls "C:\inetpub\SignageFeedAdmin\publish\App_Data" /grant "IIS AppPool\SignageAdminApp:(OI)(CI)(M)"
+icacls "C:\inetpub\SignageFeedAdmin\publish\wwwroot\feeds" /grant "IIS AppPool\SignageAdminApp:(OI)(CI)(M)"
+
+Get-WebApplication -Site "Default Web Site" -Name "signageadmin" | Format-List Path, ApplicationPool
+
 
