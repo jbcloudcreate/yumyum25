@@ -53,3 +53,11 @@ $s.AuthenticateAsClient($h)
 [Security.Cryptography.X509Certificates.X509Certificate2]::new($s.RemoteCertificate) |
   Format-List Subject, NotAfter, Thumbprint
 $s.Dispose(); $c.Dispose()
+
+$h = '<bmc-server-hostname>'
+$c = [Net.Sockets.TcpClient]::new($h, 443)
+$s = [Net.Security.SslStream]::new($c.GetStream(), $false, { $true })
+$s.AuthenticateAsClient($h)
+[Security.Cryptography.X509Certificates.X509Certificate2]::new($s.RemoteCertificate) |
+  Format-List Subject, Issuer, NotAfter
+$s.Dispose(); $c.Dispose()
