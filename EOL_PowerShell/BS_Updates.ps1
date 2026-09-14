@@ -86,3 +86,20 @@ Get-WinEvent -FilterHashtable @{LogName='Application'; ProviderName='IIS AspNetC
 
 Get-ChildItem C:\inetpub\SignageFeedAdmin\publish\wwwroot\feeds\rss
 
+## Make SWPFeedHub only for domain users
+
+## Check Windows Authentication is installed as an IIS feature
+
+Get-WindowsFeature Web-Windows-Auth
+
+Import-Module WebAdministration
+
+# Windows Auth on, anonymous off, for the Hub application
+Set-WebConfigurationProperty -PSPath "IIS:\" -Location "Default Web Site/feedhub" `
+  -Filter "/system.webServer/security/authentication/windowsAuthentication" `
+  -Name enabled -Value $true
+
+Set-WebConfigurationProperty -PSPath "IIS:\" -Location "Default Web Site/feedhub" `
+  -Filter "/system.webServer/security/authentication/anonymousAuthentication" `
+  -Name enabled -Value $false
+
