@@ -43,3 +43,46 @@ Get-ChildItem C:\inetpub\SignageFeedAdmin\publish\wwwroot\feeds\rss
 Get-ChildItem C:\inetpub\SignageFeedAdmin\keys
 
 
+## Before copying
+
+Import-Module WebAdministration
+
+# Fresh backup - the database lives inside publish, so the delete below destroys it
+mkdir C:\temp\deploy-backup-20260914-2 -Force
+copy C:\inetpub\SignageFeedAdmin\publish\App_Data\feed.db C:\temp\deploy-backup-20260914-2\
+copy C:\inetpub\SignageFeedAdmin\publish\web.config C:\temp\deploy-backup-20260914-2\
+Get-ChildItem C:\temp\deploy-backup-20260914-2
+
+## Confirm both files are listed before running the next block.
+
+# The DLL is locked while the worker process is running
+Stop-WebAppPool -Name "SignageAdminApp"
+Start-Sleep -Seconds 3
+Get-WebAppPoolState -Name "SignageAdminApp"   # expect Stopped
+
+Remove-Item C:\inetpub\SignageFeedAdmin\publish -Recurse -Force
+
+## copy your new publish
+
+## After copying
+
+# Restore the database
+mkdir C:\inetpub\SignageFeedAdmin\publish\App_Data -Force
+copy C:\temp\deploy-backup-20260914-2\feed.db C:\inetpub\SignageFeedAdmin\publish\App_Data\
+
+# Pre-create the feed output folder rather than granting write on wwwroot itself
+mkdir C:\inetpub\SignageFeedAdmin\publish\wwwroot\feeds\rss -Force
+
+# Grants
+icacls "C:\inetpub\SignageFeedAdmin\publish\App_Data" /grant "IIS AppPool\SignageAdminApp:(OI)(CI)(M)"
+icacls "C:\inetpub\SignageFeedAdmin\publish\wwwroot\feeds" /grant "IIS AppPool\SignageAdminApp:(OI)(CI)(M)"
+
+Start-WebAppPool -Name "SignageAdminApp"
+
+## Then check
+
+Get-WinEvent -FilterHashtable @{LogName='Application'; ProviderName='IIS AspNetCore Module V2'} -MaxEvents 3 |
+  Format-List TimeCreated, Id, Message
+
+Get-ChildItem C:\inetpub\SignageFeedAdmin\publish\wwwroot\feeds\rss
+
