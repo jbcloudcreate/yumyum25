@@ -1,35 +1,40 @@
-Get-WebConfiguration -PSPath "MACHINE/WEBROOT/APPHOST" `
-  -Filter "/system.webServer/security/authentication/anonymousAuthentication" |
-  Select-Object OverrideMode, OverrideModeEffective
+# 1. Backup
+mkdir C:\temp\deploy-backup-20260914
+copy C:\inetpub\SignageFeedAdmin\publish\App_Data\feed.db C:\temp\deploy-backup-20260914\
+copy C:\inetpub\SignageFeedAdmin\publish\web.config C:\temp\deploy-backup-20260914\
+Get-ChildItem C:\temp\deploy-backup-20260914
 
-& "$env:windir\system32\inetsrv\appcmd.exe" set config /section:anonymousAuthentication /overrideMode:Deny
-& "$env:windir\system32\inetsrv\appcmd.exe" set config "Default Web Site/signageadmin" /section:anonymousAuthentication /overrideMode:Allow
+# 2. Keys folder (sibling of publish, survives deploys)
+mkdir C:\inetpub\SignageFeedAdmin\keys
+icacls "C:\inetpub\SignageFeedAdmin\keys" /grant "IIS AppPool\SignageAdminApp:(OI)(CI)(M)"
 
-OR
+# 3. Stop the pool - the DLL is locked while the worker runs
+Stop-WebAppPool -Name "SignageAdminApp"
 
-Set-WebConfiguration -PSPath "MACHINE/WEBROOT/APPHOST" `
-  -Filter "/system.webServer/security/authentication/anonymousAuthentication" `
-  -Metadata overrideMode -Value Deny
+## Then confirm the backup exists before this next bit, because it deletes the only live copy:
 
-Set-WebConfiguration -PSPath "MACHINE/WEBROOT/APPHOST" `
-  -Location "Default Web Site/signageadmin" `
-  -Filter "/system.webServer/security/authentication/anonymousAuthentication" `
-  -Metadata overrideMode -Value Allow
+# 4. Replace publish wholesale - not a merge, several files were renamed
+Remove-Item C:\inetpub\SignageFeedAdmin\publish -Recurse -Force
 
-Verify:
+## Copy your new publish folder across from the laptop, then:
 
-Get-WebConfiguration -PSPath "MACHINE/WEBROOT/APPHOST" `
-  -Filter "/system.webServer/security/authentication/anonymousAuthentication" |
-  Select-Object OverrideMode, OverrideModeEffective
+# 5. Restore the database
+mkdir C:\inetpub\SignageFeedAdmin\publish\App_Data
+copy C:\temp\deploy-backup-20260914\feed.db C:\inetpub\SignageFeedAdmin\publish\App_Data\
 
-Get-WebConfiguration -PSPath "MACHINE/WEBROOT/APPHOST" -Location "Default Web Site/signageadmin" `
-  -Filter "/system.webServer/security/authentication/anonymousAuthentication" |
-  Select-Object OverrideMode, OverrideModeEffective
+# 6. Pre-create the feed output folder and grant write
+mkdir C:\inetpub\SignageFeedAdmin\publish\wwwroot\feeds\rss
+icacls "C:\inetpub\SignageFeedAdmin\publish\App_Data" /grant "IIS AppPool\SignageAdminApp:(OI)(CI)(M)"
+icacls "C:\inetpub\SignageFeedAdmin\publish\wwwroot\feeds" /grant "IIS AppPool\SignageAdminApp:(OI)(CI)(M)"
 
-TEST - Issues (reverse)
-Set-WebConfiguration -PSPath "MACHINE/WEBROOT/APPHOST" `
-  -Filter "/system.webServer/security/authentication/anonymousAuthentication" `
-  -Metadata overrideMode -Value Allow
+# 7. Start
+Start-WebAppPool -Name "SignageAdminApp"
 
-Stop-Website -Name "Signagefeedadmin"
-Stop-Website -Name "SWPICTSignageFeedHub"
+## First check
+
+## Before touching the browser:
+
+Get-WinEvent -FilterHashtable @{LogName='Application'; ProviderName='IIS AspNetCore Module V2'} -MaxEvents 5 |
+  Format-List TimeCreated, Id, Message
+
+## You want "started successfully". If FeedCatalog rejects the config the app won't start, and the message will say which feed and why.
