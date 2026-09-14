@@ -38,3 +38,8 @@ Get-WinEvent -FilterHashtable @{LogName='Application'; ProviderName='IIS AspNetC
   Format-List TimeCreated, Id, Message
 
 ## You want "started successfully". If FeedCatalog rejects the config the app won't start, and the message will say which feed and why.
+
+Get-ChildItem C:\inetpub\SignageFeedAdmin\publish\wwwroot\feeds\rss
+Get-ChildItem C:\inetpub\SignageFeedAdmin\keys
+
+
