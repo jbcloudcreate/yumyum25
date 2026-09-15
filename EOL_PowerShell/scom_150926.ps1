@@ -22,8 +22,14 @@ Get-ServerHealth -Identity SWPFW-MBS04 -HealthSet Search |
 Get-MailboxDatabase -Server SWPFW-MBS04 -Status |
   Select-Object Name, Mounted, Server | Format-Table -AutoSize
 
-Get-WinEvent -LogName System -FilterHashtable @{
+##
+
+Get-WinEvent -FilterHashtable @{
     LogName = 'System'; ID = 7040; StartTime = (Get-Date).AddDays(-30)
 } | Where-Object { $_.Message -match 'Host Controller' } |
   Select-Object TimeCreated, Message | Format-List
 
+Get-MailboxDatabase -Server SWPFW-MBS04 -Status | Select-Object Name, Mounted, Server
+
+Get-MailboxDatabaseCopyStatus -Server SWPFW-MBS04 |
+  Select-Object Name, Status, ContentIndexState | Format-Table -AutoSize
