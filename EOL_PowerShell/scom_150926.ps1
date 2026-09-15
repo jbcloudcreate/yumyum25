@@ -23,3 +23,21 @@ Get-CimInstance Win32_LogicalDisk -ComputerName SWPFW-MBS04 -Filter "DriveType=3
   Select-Object DeviceID, @{n='FreeGB';e={[math]::Round($_.FreeSpace/1GB,1)}},
                           @{n='SizeGB';e={[math]::Round($_.Size/1GB,1)}}
 
+Who changed it
+
+Get-WinEvent -ComputerName SWPFW-MBS04 -FilterHashtable @{
+    LogName = 'System'; ID = 7040
+} -MaxEvents 50 |
+  Where-Object { $_.Message -like '*Host Controller*' -or $_.Message -like '*HostController*' } |
+  Select-Object TimeCreated, Id, Message |
+  Format-List
+
+Get-WinEvent -ComputerName SWPFW-MBS04 -FilterHashtable @{
+    LogName = 'System'; StartTime = '2026-09-15 00:00'; EndTime = '2026-09-15 01:30'
+} | Select-Object TimeCreated, Id, ProviderName, LevelDisplayName -First 40
+
+Set-ADServerSettings -ViewEntireForest $true
+Get-MailboxDatabaseCopyStatus -Server SWPFW-MBS04 |
+  Select-Object Name, Status, ContentIndexState, ContentIndexErrorMessage |
+  Format-Table -AutoSize
+
