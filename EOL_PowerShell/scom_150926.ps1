@@ -32,3 +32,13 @@ Get-WinEvent -FilterHashtable @{LogName='System'; ID=104; StartTime=(Get-Date).A
 Get-MailboxDatabase | Select-Object Name, Server | Format-Table -AutoSize
 Get-ExchangeServer SWPFW-MBS04 | Select-Object Name, ServerRole, Site
 
+##
+
+$key = Get-Item 'HKLM:\SYSTEM\CurrentControlSet\Services\HostControllerService'
+$key.GetType().GetProperty('LastWriteTime','NonPublic,Instance')
+
+Cause: Host Controller service found Stopped with start type Disabled. Managed Availability could not auto-recover, as the SCM cannot start a disabled service.
+Fix: Start type restored to Automatic, service started, dependent MSExchangeFastSearch restarted. Four noderunner processes confirmed spawned. Search health set returned clean.
+Impact: None. MBS04 hosts no mailbox databases, so no content indexing or search functionality was affected.
+Root cause: Not established. No Event ID 7040 in 11 weeks of System log, indicating the start type was changed outside the SCM rather than through normal service management. Build parity with MBS05 rules out a failed CU; MBS05 unaffected rules out estate-wide policy.
+Follow-up: MBS04 is a Mailbox-role server with no databases assigned — worth confirming its intended purpose.
