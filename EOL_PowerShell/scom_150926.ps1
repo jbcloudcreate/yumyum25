@@ -41,3 +41,23 @@ Get-MailboxDatabaseCopyStatus -Server SWPFW-MBS04 |
   Select-Object Name, Status, ContentIndexState, ContentIndexErrorMessage |
   Format-Table -AutoSize
 
+## Step 7 — Check for an interrupted update
+
+Get-ExchangeServer SWPFW-MBS04, SWPFW-MBS05 | Select-Object Name, AdminDisplayVersion, Edition
+
+Get-ChildItem \\SWPFW-MBS04\C$\ExchangeSetupLogs\ | Sort-Object LastWriteTime -Descending | Select-Object -First 5
+Get-Content \\SWPFW-MBS04\C$\ExchangeSetupLogs\ExchangeSetup.log -Tail 100
+
+Get-HotFix -ComputerName SWPFW-MBS04 | Sort-Object InstalledOn -Descending | Select-Object -First 10
+
+Get-WinEvent -ComputerName SWPFW-MBS04 -FilterHashtable @{
+    LogName = 'System'; ID = 7040; StartTime = (Get-Date).AddDays(-7)
+} | Where-Object { $_.Message -match 'Host Controller|HostController' } |
+  Select-Object TimeCreated, Message | Format-List
+
+Get-WinEvent -ComputerName SWPFW-MBS04 -FilterHashtable @{
+    LogName = 'System'; StartTime = '2026-09-15 00:00'; EndTime = '2026-09-15 02:00'
+    Level = 1,2,3
+} | Sort-Object TimeCreated | Select-Object TimeCreated, Id, ProviderName, LevelDisplayName, Message |
+  Format-Table -AutoSize -Wrap
+
