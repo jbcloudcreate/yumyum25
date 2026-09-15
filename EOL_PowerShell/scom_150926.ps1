@@ -24,12 +24,11 @@ Get-MailboxDatabase -Server SWPFW-MBS04 -Status |
 
 ##
 
-Get-WinEvent -FilterHashtable @{
-    LogName = 'System'; ID = 7040; StartTime = (Get-Date).AddDays(-30)
-} | Where-Object { $_.Message -match 'Host Controller' } |
+(Get-WinEvent -LogName System -MaxEvents 1 -Oldest).TimeCreated
+
+Get-WinEvent -FilterHashtable @{LogName='System'; ID=104; StartTime=(Get-Date).AddDays(-30)} -ErrorAction SilentlyContinue |
   Select-Object TimeCreated, Message | Format-List
 
-Get-MailboxDatabase -Server SWPFW-MBS04 -Status | Select-Object Name, Mounted, Server
+Get-MailboxDatabase | Select-Object Name, Server | Format-Table -AutoSize
+Get-ExchangeServer SWPFW-MBS04 | Select-Object Name, ServerRole, Site
 
-Get-MailboxDatabaseCopyStatus -Server SWPFW-MBS04 |
-  Select-Object Name, Status, ContentIndexState | Format-Table -AutoSize
