@@ -41,3 +41,16 @@ Get-WinEvent -FilterHashtable @{LogName='Application'; ProviderName='IIS AspNetC
 Get-ChildItem C:\inetpub\SignageFeedAdmin\publish\wwwroot\feeds\rss
 
 # "Started successfully" plus four XML files. Then load a BU page and confirm the nav shows three links rather than four, and that the picker's four tiles sit on one row.
+
+Import-Module WebAdministration
+
+# Windows Auth on, anonymous off, for the Hub application
+Set-WebConfigurationProperty -PSPath "IIS:\" -Location "Default Web Site/feedhub" `
+  -Filter "/system.webServer/security/authentication/windowsAuthentication" `
+  -Name enabled -Value $true
+
+Set-WebConfigurationProperty -PSPath "IIS:\" -Location "Default Web Site/feedhub" `
+  -Filter "/system.webServer/security/authentication/anonymousAuthentication" `
+  -Name enabled -Value $false
+
+Get-WindowsFeature Web-Windows-Auth
