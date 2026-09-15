@@ -42,3 +42,11 @@ Fix: Start type restored to Automatic, service started, dependent MSExchangeFast
 Impact: None. MBS04 hosts no mailbox databases, so no content indexing or search functionality was affected.
 Root cause: Not established. No Event ID 7040 in 11 weeks of System log, indicating the start type was changed outside the SCM rather than through normal service management. Build parity with MBS05 rules out a failed CU; MBS05 unaffected rules out estate-wide policy.
 Follow-up: MBS04 is a Mailbox-role server with no databases assigned — worth confirming its intended purpose.
+
+Morning - the SCOM alert on SWPFW-MBS04 (Search health set, 04:24 today) is resolved, fine to close.
+
+The Exchange Search Host Controller service was stopped and set to Disabled, so Managed Availability couldn't auto-recover it - Windows won't start a disabled service. I've set it back to Automatic, started it, and restarted FastSearch. Health set is clean.
+No user impact - MBS04 holds no mailbox databases, so nothing was relying on it.
+Can't establish what disabled it (no service change events in 11 weeks of logs), so if it reappears on MBS04 please flag it to me rather than just closing.
+
+James
