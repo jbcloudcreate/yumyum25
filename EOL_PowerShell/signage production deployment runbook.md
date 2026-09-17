@@ -60,6 +60,26 @@ Get-WebConfiguration -PSPath "MACHINE/WEBROOT/APPHOST" `
 
 # --- DNS ---
 Resolve-DnsName swpapp-digisign.swp-rest.police.int
+
+# Are we actually elevated?
+(New-Object Security.Principal.WindowsPrincipal(
+  [Security.Principal.WindowsIdentity]::GetCurrent())
+).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+
+# IIS state, via appcmd - independent of the PowerShell provider
+Get-Service W3SVC, WAS | Select-Object Name, Status, StartType
+Test-Path C:\Windows\System32\inetsrv\appcmd.exe
+& "$env:windir\system32\inetsrv\appcmd.exe" list site
+& "$env:windir\system32\inetsrv\appcmd.exe" list app
+& "$env:windir\system32\inetsrv\appcmd.exe" list apppool
+
+# Full SAN lists - I need to know who else depends on these
+(Get-Item Cert:\LocalMachine\My\03BD544B9A511AB31445C19B0D8B20179539197D).DnsNameList
+(Get-Item Cert:\LocalMachine\My\E6CB35781050019F64387955CDA49899ADE6CFA3).DnsNameList
+
+# What is actually listening
+Get-NetTCPConnection -State Listen -LocalPort 80,443 |
+  Select-Object LocalAddress, LocalPort, OwningProcess
 ```
 
 ### How to read the output
