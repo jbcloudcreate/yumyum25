@@ -45,6 +45,84 @@ All commands are PowerShell, run **elevated**, on the target server unless state
 
 Use `appcmd` for enumeration on this server; the `WebAdministration` provider returned empty results during the survey. The `Set-WebConfiguration` cmdlets work normally.
 
+**Start the transcript (Part 0) before anything else.** Every command and its output is captured to a file, which becomes the evidence pack for the change record and the diagnostic trail if something needs unpicking afterwards.
+
+---
+
+## Part 0 — Start the transcript
+
+Run this first, in the same elevated session you will use for the whole deployment.
+
+```powershell
+$deployRoot = "C:\temp\SignageDeploy"
+$stamp      = Get-Date -Format 'yyyyMMdd-HHmm'
+mkdir "$deployRoot\transcripts" -Force | Out-Null
+
+$transcript = "$deployRoot\transcripts\prod-deploy-$stamp.log"
+Start-Transcript -Path $transcript -IncludeInvocationHeader
+
+# Context header - makes the transcript self-describing months later
+"=== SWP Signage Feed Admin - production deployment ==="
+"Runbook version : 3.0"
+"Server          : $env:COMPUTERNAME"
+"Operator        : $env:USERDOMAIN\$env:USERNAME"
+"Started         : $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
+"Transcript      : $transcript"
+"======================================================="
+```
+
+Keep this session open for the whole deployment. `$deployRoot`, `$stamp` and `$transcript` are referenced later.
+
+### Stage markers
+
+A 400-line transcript is hard to navigate after the fact. Define this helper now and run it at the start of each part, so the log has searchable headings:
+
+```powershell
+function Mark([string]$text) {
+    ""
+    "########## $text  [$(Get-Date -Format 'HH:mm:ss')] ##########"
+    ""
+}
+```
+
+Use it like this at the top of each part:
+
+```powershell
+Mark "Part 2 - repair the HTTPS binding"
+```
+
+And at each test gate, record the verdict explicitly — the transcript should say whether a gate passed, not leave a reader to infer it from raw output:
+
+```powershell
+Mark "TEST GATE 2 - PASSED"
+```
+
+### If the session drops or you need to stop partway
+
+```powershell
+Stop-Transcript          # if the session is still alive
+```
+
+To resume in a new session, append to the same file rather than starting a second one:
+
+```powershell
+$transcript = "C:\temp\SignageDeploy\transcripts\prod-deploy-<original stamp>.log"
+Start-Transcript -Path $transcript -Append -IncludeInvocationHeader
+"=== Resumed $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss') at Part <n> ==="
+```
+
+### Notes
+
+- Transcripts capture **everything** shown on screen, including any output you did not expect. Read before circulating.
+- Native command output (`netsh`, `appcmd`, `curl.exe`, `icacls`) is captured as well as PowerShell output.
+- The transcript records what was *run*, not what was *intended* — if you deviate from the runbook, say so in a comment line so the record explains itself:
+
+```powershell
+"NOTE: skipped Part 1.2 - Hosting Bundle already present"
+```
+
+- Keep the transcript with the change record. It is also the raw material for the Administrator SOP.
+
 ---
 
 ## Part 1 — ⚠ Prerequisites
@@ -515,6 +593,49 @@ Your site will be id 4, so `W3SVC4`. No entry from the player's IP means the req
 - [ ] Refresh the source backup
 - [ ] Raise removal of the abandoned `signage` site (id 2) and `Default Web Site/signage` as a separate tidy-up
 - [ ] Decommission the dev instance, or mark it clearly as non-production
+
+---
+
+## Part 12 — Stop the transcript
+
+Run at the end of the deployment session, whether it completed or was backed out.
+
+```powershell
+Mark "Deployment session ending"
+
+# Final state summary, captured into the transcript as the closing record
+"--- Final state ---"
+& "$env:windir\system32\inetsrv\appcmd.exe" list site
+& "$env:windir\system32\inetsrv\appcmd.exe" list app
+& "$env:windir\system32\inetsrv\appcmd.exe" list apppool
+netsh http show sslcert ipport=0.0.0.0:443
+Get-ChildItem E:\SignageFeedAdmin\data, E:\SignageFeedAdmin\keys
+Get-ChildItem E:\inetpub\wwwroot\signageadmin\wwwroot\feeds\rss
+
+"Outcome: <completed | partially completed | backed out>"
+"Notes  : <anything that deviated from the runbook>"
+"Ended  : $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')"
+
+Stop-Transcript
+```
+
+Fill in the outcome and notes lines before running `Stop-Transcript` — they are the first thing anyone reads.
+
+### Afterwards
+
+```powershell
+# Confirm the file and check its size looks sane
+Get-Item $transcript | Select-Object FullName, Length, LastWriteTime
+
+# Quick review of the stage markers only
+Select-String -Path $transcript -Pattern '^##########'
+```
+
+Then:
+
+- Attach the transcript to the change record
+- Copy it off the server — `C:\temp` is not a durable location
+- Keep it alongside the deployment evidence; it is also the raw material for the Administrator SOP
 
 ---
 
