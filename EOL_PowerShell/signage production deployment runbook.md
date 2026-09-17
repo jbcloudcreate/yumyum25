@@ -1,162 +1,70 @@
 # SWP Signage Feed Admin — Production Deployment Runbook
 
-**Target server:** `swpapp-digisign.swp-rest.police.int`
-**Assumption:** shared IIS server hosting other teams' applications
-**Version:** 2.0 (supersedes v1.0, which assumed a dedicated server)
-**Prepared:** 16 September 2026
+**Target server:** `swpapp-digisign.swp-rest.police.int` (`10.129.242.24`)
+**Version:** 3.0 — written against the server as surveyed on 17 September 2026
+**Supersedes:** v1.0 (assumed dedicated server), v2.0 (assumed unknown shared server)
 **Prepared by:** James Buller, ICT Datacenter Team
+
+---
+
+## Server as found
+
+| | |
+|---|---|
+| OS | Windows Server 2019 Standard |
+| IP | `10.129.242.24` |
+| Web root | `E:\inetpub\wwwroot` |
+| IIS logs | `E:\inetpub\logs\LogFiles` |
+| .NET runtime | **None installed** |
+| Existing sites | `Default Web Site` (id 1), `signage` (id 2), `MeetingRoomHowTo` (id 3) |
+| HTTPS status | **Broken.** `Default Web Site` holds the only 443 binding, carrying a certificate that expired 3 July 2026 |
+| `anonymousAuthentication` lock | `Deny` (correct default) |
+
+**Local conventions to follow:** sites are siblings, not applications under `Default Web Site`. Bindings are IP-specific with a host header (`10.129.242.24:80:name`), not `*`. Everything lives on `E:`.
+
+**The `signage` site (id 2)** is an abandoned prototype from 2021–2022 — no `W3SVC2` log directory exists, so it has never served a request. **Leave it alone.** Removing it is a separate tidy-up, not part of this deployment.
+
+---
+
+## Certificates on this server
+
+| Thumbprint | Valid to | EKU | Use |
+|---|---|---|---|
+| `E6CB3578…` | **expired 03/07/2026** | Server Auth | Currently bound to 443. Replace in Part 2. |
+| `03BD544B…` | 29/06/2029 | Server Auth | **Use this.** Covers 14 hostnames including ours. |
+| `C8B70B74…` | 16/05/2029 | Server + Client Auth | Valid alternative, our hostname only |
+| `14B60634…` | 16/05/2027 | *SSL Secured Remote Desktop* | **Unusable** — RDP certificate, not for IIS |
 
 ---
 
 ## How to use this document
 
-Work through the parts in order. **Part 0 is a hard gate** — its output decides Part 6, and may remove the need for Part 1 entirely.
+Work through in order. Stages marked ⚠ touch shared infrastructure and each ends with a **test gate** — do not proceed past a failed gate.
 
-Commands are PowerShell, run **elevated**, on the target server unless the heading says otherwise.
+All commands are PowerShell, run **elevated**, on the target server unless stated.
 
-Because the server is shared, three steps carry risk to **other teams' applications**. They are marked ⚠ and each has a check that the other applications still work afterwards. Do not batch these with anything else.
+Use `appcmd` for enumeration on this server; the `WebAdministration` provider returned empty results during the survey. The `Set-WebConfiguration` cmdlets work normally.
 
 ---
 
-## Part 0 — Discovery (run first, report back)
+## Part 1 — ⚠ Prerequisites
 
-Nothing here changes anything.
+### 1.1 Confirm role services
 
 ```powershell
-# --- Identity and OS ---
-$env:COMPUTERNAME
-[System.Net.Dns]::GetHostEntry($env:COMPUTERNAME).HostName
-Get-CimInstance Win32_OperatingSystem | Select-Object Caption, Version
-
-# --- IIS role services ---
 Get-WindowsFeature Web-Server, Web-Windows-Auth, Web-Static-Content, Web-Http-Logging |
   Select-Object Name, InstallState
-
-# --- Is a .NET runtime already present? ---
-dotnet --list-runtimes 2>$null
-if (-not $?) { "No dotnet runtime on PATH" }
-Get-WebGlobalModule | Where-Object { $_.Name -like "*AspNetCore*" }
-
-# --- What else lives here? ---
-Import-Module WebAdministration
-Get-Website | Select-Object Name, State, PhysicalPath, ID
-Get-WebApplication
-Get-ChildItem IIS:\AppPools | Select-Object Name, State, ManagedRuntimeVersion
-
-# --- Bindings and certificates in use ---
-Get-WebBinding | Select-Object protocol, bindingInformation, ItemXPath
-netsh http show sslcert
-
-# --- Certificate for our hostname ---
-Get-ChildItem Cert:\LocalMachine\My |
-  Where-Object { $_.Subject -like "*DIGISIGN*" -or ($_.DnsNameList -join ' ') -like "*digisign*" } |
-  Format-List Subject, DnsNameList, NotBefore, NotAfter, Thumbprint, HasPrivateKey, EnhancedKeyUsageList, Issuer
-
-# --- CRITICAL: current lock state of anonymousAuthentication ---
-# If this already reads Allow, something else on this server may depend on it.
-Get-WebConfiguration -PSPath "MACHINE/WEBROOT/APPHOST" `
-  -Filter "/system.webServer/security/authentication/anonymousAuthentication" |
-  Select-Object OverrideMode, OverrideModeEffective
-
-# --- DNS ---
-Resolve-DnsName swpapp-digisign.swp-rest.police.int
-
-# Are we actually elevated?
-(New-Object Security.Principal.WindowsPrincipal(
-  [Security.Principal.WindowsIdentity]::GetCurrent())
-).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-
-# IIS state, via appcmd - independent of the PowerShell provider
-Get-Service W3SVC, WAS | Select-Object Name, Status, StartType
-Test-Path C:\Windows\System32\inetsrv\appcmd.exe
-& "$env:windir\system32\inetsrv\appcmd.exe" list site
-& "$env:windir\system32\inetsrv\appcmd.exe" list app
-& "$env:windir\system32\inetsrv\appcmd.exe" list apppool
-
-# Full SAN lists - I need to know who else depends on these
-(Get-Item Cert:\LocalMachine\My\03BD544B9A511AB31445C19B0D8B20179539197D).DnsNameList
-(Get-Item Cert:\LocalMachine\My\E6CB35781050019F64387955CDA49899ADE6CFA3).DnsNameList
-
-# What is actually listening
-Get-NetTCPConnection -State Listen -LocalPort 80,443 |
-  Select-Object LocalAddress, LocalPort, OwningProcess
-
-& "$env:windir\system32\inetsrv\appcmd.exe" list vdir
-& "$env:windir\system32\inetsrv\appcmd.exe" list site /text:*
-
-Get-ChildItem "C:\inetpub" -Directory
-
-(Get-Item Cert:\LocalMachine\My\03BD544B9A511AB31445C19B0D8B20179539197D).DnsNameList |
-  Select-Object Punycode
-
-Get-NetTCPConnection -State Listen | Where-Object LocalPort -in 80,443 |
-  Select-Object LocalAddress, LocalPort, OwningProcess
-
-'swpapp-digisign','digitalsignage','brightsign','ict' | ForEach-Object {
-    $n = "$_.swp-rest.police.int"
-    try {
-        $r = Resolve-DnsName $n -ErrorAction Stop | Where-Object Type -eq 'A'
-        "{0,-45} {1}" -f $n, ($r.IPAddress -join ', ')
-    } catch { "{0,-45} does not resolve" -f $n }
-}
-
-# Anything hitting site 2 or the /signage path recently?
-Get-ChildItem E:\inetpub\logs\LogFiles -Recurse -Filter *.log |
-  Sort-Object LastWriteTime -Descending | Select-Object -First 5 FullName, LastWriteTime
-
-Get-ChildItem E:\inetpub\logs\LogFiles\W3SVC2\*.log |
-  Sort-Object LastWriteTime -Descending | Select-Object -First 1 |
-  Get-Content | Select-Object -Last 20
-
-# What's actually in there
-Get-ChildItem E:\inetpub\wwwroot\signage -Recurse -File |
-  Select-Object FullName, Length, LastWriteTime
 ```
 
-http/10.129.242.24:80:signage
-http/10.129.242.24:80:MeetingRoomHowTo.swp-rest.police.int
-
-### How to read the output
-
-| Finding | Consequence |
-|---|---|
-| `AspNetCoreModuleV2` present in global modules | **Hosting Bundle already installed.** Part 1.2 can be skipped — no IIS restart, no change window for it. Verify the version covers .NET 10. |
-| No `AspNetCoreModuleV2` | Part 1.2 required, and it restarts IIS. ⚠ Affects every application on this server — schedule a window. |
-| `Web-Windows-Auth` not installed | Required. Installing a role service can also restart IIS. ⚠ |
-| A binding `*:443:` with no hostname on another site | Your HTTPS binding needs **SNI**. Part 6, Option A. |
-| No 443 binding at all | Simpler — a plain hostname binding works. |
-| Certificate with `Server Authentication` EKU and our hostname | Good. Use its thumbprint. |
-| Certificate EKU shows only *SSL Secured Remote Desktop* | Unusable — that is the RDP certificate. Request a Web Server template certificate from PKI. Lead-time item. |
-| `OverrideModeEffective` already `Allow` globally | **Do not simply lock it in Part 8.** Something may depend on it. See Part 8.1. |
-| Several `.NET`-looking applications sharing one pool | Informational, but note in-process hosting permits one ASP.NET Core app per pool. |
-
-**Stop here. Send me the output before continuing** — Part 6 has two mutually exclusive routes and this decides which.
-
----
-
-## Part 1 — Prerequisites
-
-### 1.1 IIS role services
-
-Only if Part 0 showed something missing.
-
-```powershell
-Get-WindowsFeature Web-Server, Web-Windows-Auth, Web-Static-Content | Select-Object Name, InstallState
-```
-
-⚠ If `Web-Windows-Auth` is missing, installing it may restart IIS:
+If `Web-Windows-Auth` is not installed:
 
 ```powershell
 Install-WindowsFeature -Name Web-Windows-Auth
 ```
 
-Then check the other applications still respond before going further.
-
 ### 1.2 .NET 10 Hosting Bundle
 
-**Skip entirely if Part 0 showed `AspNetCoreModuleV2` and a .NET 10 runtime.**
-
-⚠ This installer restarts IIS, interrupting every application on the server. Schedule a window and notify the other application owners.
+No .NET runtime is present, so this is required. **This restarts IIS and briefly interrupts all three existing sites.**
 
 Download on your laptop from `https://dotnet.microsoft.com/download/dotnet/10.0` — the **ASP.NET Core Runtime Hosting Bundle**, not the SDK — and copy across.
 
@@ -166,94 +74,161 @@ Start-Process -FilePath $installer -ArgumentList "/quiet","/norestart" -Wait -No
 
 net stop was /y
 net start w3svc
-
-dotnet --list-runtimes
-Get-WebGlobalModule | Where-Object { $_.Name -like "*AspNetCore*" }
 ```
 
-**Then immediately confirm the other applications on this server still work.** Browse two or three of them. A failed Hosting Bundle install that breaks an existing app is far easier to unpick within minutes than hours.
+### ✅ Test gate 1
+
+```powershell
+dotnet --list-runtimes
+Get-WebGlobalModule | Where-Object { $_.Name -like "*AspNetCore*" }
+
+& "$env:windir\system32\inetsrv\appcmd.exe" list site
+
+curl.exe -I http://swpapp-digisign.swp-rest.police.int/
+curl.exe -I http://meetingroomhowto.swp-rest.police.int/
+```
+
+Required: `Microsoft.AspNetCore.App 10.0.x` listed, `AspNetCoreModuleV2` present, all three sites Started, both HTTP requests returning a status line.
+
+If `AspNetCoreModuleV2` is missing, the bundle installed before IIS was ready — re-run the installer with `/repair`.
 
 ---
 
-## Part 2 — Certificate
+## Part 2 — ⚠ Repair the HTTPS binding
 
-Confirm all four before using a certificate:
+`Default Web Site` serves an expired certificate on 443, so **all HTTPS on this server currently fails**. The valid replacement is already in the store, unused.
 
-- `DnsNameList` contains `swpapp-digisign.swp-rest.police.int`
-- `EnhancedKeyUsageList` includes **Server Authentication**
-- `HasPrivateKey` is **True**
-- `NotAfter` is comfortably in the future
+This is fixed first, as its own stage, so that adding your binding in Part 6 is not compounded with an existing fault.
+
+### 2.1 Record the fault
 
 ```powershell
-$certThumb = "<thumbprint from Part 0>"
-Get-ChildItem Cert:\LocalMachine\My\$certThumb |
-  Format-List Subject, DnsNameList, NotAfter, EnhancedKeyUsageList
+netsh http show sslcert ipport=0.0.0.0:443
+
+curl.exe -v https://swpapp-digisign.swp-rest.police.int/ 2>&1 |
+  Select-String "SEC_E|expired|error"
 ```
 
-If no suitable certificate exists, raise a PKI request on a **Web Server** template now — it is the longest lead-time item in this deployment.
+Expect `SEC_E_CERT_EXPIRED`. Keep this output — it evidences that the fault pre-dated your change.
 
-> **For the runbook:** IIS SSL bindings pin to a *thumbprint*. Auto-enrolled certificates renew with a new thumbprint and the binding does not follow, producing a silent HTTPS outage. Record the renewal date or script a rebind.
+### 2.2 Rebind
+
+```powershell
+$new   = "03BD544B9A511AB31445C19B0D8B20179539197D"
+$appid = "{4dc3e181-e14b-4a21-b022-59fc669b0914}"   # IIS's own, from the existing binding
+
+netsh http delete sslcert ipport=0.0.0.0:443
+netsh http add sslcert ipport=0.0.0.0:443 certhash=$new appid=$appid certstorename=MY
+netsh http show sslcert ipport=0.0.0.0:443
+```
+
+Reusing the same `appid` preserves IIS ownership of the binding.
+
+### ✅ Test gate 2
+
+```powershell
+# What is actually served now
+$h = 'swpapp-digisign.swp-rest.police.int'
+$c = [Net.Sockets.TcpClient]::new($h, 443)
+$s = [Net.Security.SslStream]::new($c.GetStream(), $false, { $true })
+$s.AuthenticateAsClient($h)
+[Security.Cryptography.X509Certificates.X509Certificate2]::new($s.RemoteCertificate) |
+  Format-List Subject, NotAfter, Thumbprint
+$s.Dispose(); $c.Dispose()
+
+# Handshake completes without forcing trust
+curl.exe -I https://swpapp-digisign.swp-rest.police.int/
+
+# Existing HTTP sites unaffected
+curl.exe -I http://swpapp-digisign.swp-rest.police.int/signage
+curl.exe -I http://meetingroomhowto.swp-rest.police.int/
+```
+
+Required: thumbprint `03BD544B…`, `NotAfter` June 2029, curl returns a status line rather than a handshake error, both HTTP sites still responding.
+
+**Back-out for this stage:**
+
+```powershell
+netsh http delete sslcert ipport=0.0.0.0:443
+netsh http add sslcert ipport=0.0.0.0:443 `
+  certhash=E6CB35781050019F64387955CDA49899ADE6CFA3 `
+  appid="{4dc3e181-e14b-4a21-b022-59fc669b0914}" certstorename=MY
+```
+
+Restores the previous (broken) state exactly.
+
+> **Note for the change record.** After this fix, the other hostnames on that certificate — `meetingroomhowto`, `vthome`, `vchome`, the virtual tours — will complete a TLS handshake where previously they failed, and then serve `Default Web Site` content because those sites bind HTTP only. Both outcomes are wrong; neither is worse than the other. Those services are unaffected in normal (HTTP) use.
+
+> **Renewal trap.** IIS SSL bindings pin to a thumbprint. Auto-enrolled certificates renew with a *new* thumbprint and the binding does not follow — which is exactly what produced this outage. Record 29 June 2029, or script a rebind.
 
 ---
 
 ## Part 3 — Folder structure
 
-Production keeps the database and key ring **outside** the publish folder, so deployments never touch them.
+Following local convention: web content under `E:\inetpub\wwwroot`, and data **outside** the web root so IIS never serves it.
 
 ```powershell
-mkdir C:\inetpub\SignageFeedAdmin\publish -Force
-mkdir C:\inetpub\SignageFeedAdmin\data -Force
-mkdir C:\inetpub\SignageFeedAdmin\keys -Force
-mkdir C:\inetpub\SignageFeedAdmin\publish\wwwroot\feeds\rss -Force
-mkdir C:\inetpub\SWPICTHub\images -Force
+# Web content
+mkdir E:\inetpub\wwwroot\signageadmin -Force
+mkdir E:\inetpub\wwwroot\signageadmin\wwwroot\feeds\rss -Force
+mkdir E:\inetpub\wwwroot\icthub\images -Force
 
-Get-ChildItem C:\inetpub -Directory
+# Application data - deliberately outside the web root and outside publish,
+# so a deployment never touches it and IIS can never serve it
+mkdir E:\SignageFeedAdmin\data -Force
+mkdir E:\SignageFeedAdmin\keys -Force
+
+Get-ChildItem E:\inetpub\wwwroot -Directory
+Get-ChildItem E:\SignageFeedAdmin -Directory
 ```
 
-Permissions come in Part 6.4, once the application pools exist.
+`E:\inetpub\wwwroot\signageadmin` is the publish target — replaced wholesale on every deployment. `E:\SignageFeedAdmin\` holds the database and key ring and is never touched by a deployment.
+
+Permissions follow in Part 6.3, once the application pools exist.
 
 ---
 
 ## Part 4 — Production configuration
 
-### 4.1 The values depend on Part 6's route
+### 4.1 appsettings.json
 
-Two of these differ between the two structural options. **Do not build until Part 6 is decided.**
+On your laptop, take the dev project and change five values.
 
 ```json
 {
   "Feed": {
-    "DbPath": "C:\\inetpub\\SignageFeedAdmin\\data\\feed.db",
-    "ChannelLink": "<see table below>",
+    "DbPath": "E:\\SignageFeedAdmin\\data\\feed.db",
+    "ChannelLink": "https://swpapp-digisign.swp-rest.police.int/",
     "LegacyFeedId": "datacenter"
   },
   "Hub": {
-    "Url": "<see table below>"
+    "Url": "/"
   },
-  "Feeds": [ ... unchanged from dev ... ],
+  "Feeds": [ ... four feed definitions unchanged from dev ... ],
   "Auth": {
     "AdminGroup": "SWP-NET\\SignageFeedAdmins"
   },
   "DataProtection": {
-    "KeyRingPath": "C:\\inetpub\\SignageFeedAdmin\\keys"
+    "KeyRingPath": "E:\\SignageFeedAdmin\\keys"
   },
   "Logging": { ... unchanged ... },
   "AllowedHosts": "*"
 }
 ```
 
-| Setting | Option A (own site) | Option B (under Default Web Site) |
-|---|---|---|
-| `Hub:Url` | `/` | `/feedhub/` |
-| `Feed:ChannelLink` | `https://swpapp-digisign.swp-rest.police.int/` | `https://swpapp-digisign.swp-rest.police.int/feedhub/` |
+| Key | Dev | Production | Why |
+|---|---|---|---|
+| `Feed:DbPath` | `App_Data/feed.db` | `E:\SignageFeedAdmin\data\feed.db` | Survives deployment; outside web root |
+| `DataProtection:KeyRingPath` | empty (derived) | `E:\SignageFeedAdmin\keys` | Explicit, no reliance on relative resolution |
+| `Feed:ChannelLink` | dev host `/feedhub/` | production host root | Hub sits at the site root here |
+| `Hub:Url` | `/feedhub/` | `/` | Same reason |
+| `Auth:AdminGroup` | — | `SWP-NET\SignageFeedAdmins` | Should already match dev |
 
-Unchanged from dev in both cases: the four feed definitions and their AD groups.
-
-Changed from dev in both cases: `DbPath` and `KeyRingPath` become absolute paths outside `publish`, and `AdminGroup` is `SignageFeedAdmins`.
+The four feed definitions and their AD groups are unchanged.
 
 ### 4.2 The Hub's index.html
 
-No change needed for either option. Its tile links are root-relative (`/signageadmin/...`) and its logo path is relative — both correct whether the Hub sits at the root or under `/feedhub/`.
+**No change needed.** Its tile links are root-relative (`/signageadmin/...`) and its logo path is relative (`images/swp-logo.png`) — both correct with the Hub at the site root.
 
 ### 4.3 Build (on your laptop)
 
@@ -268,7 +243,7 @@ dotnet publish -c Release -o .\publish
 Select-String -Path .\publish\web.config -Pattern 'forwardWindowsAuthToken|location path="feeds"'
 ```
 
-Both `web.config` patterns must match. If either is missing, stop — do not hand-patch.
+Both `web.config` patterns must match. If either is missing, stop — do not hand-patch the published file.
 
 ---
 
@@ -276,233 +251,174 @@ Both `web.config` patterns must match. If either is missing, stop — do not han
 
 | From | To |
 |---|---|
-| `C:\temp\SignageFeedAdmin\publish\*` | `C:\inetpub\SignageFeedAdmin\publish\` |
-| ICT Hub `index.html` | `C:\inetpub\SWPICTHub\` |
-| `swp-logo.png` | `C:\inetpub\SWPICTHub\images\` |
+| `C:\temp\SignageFeedAdmin\publish\*` | `E:\inetpub\wwwroot\signageadmin\` |
+| ICT Hub `index.html` | `E:\inetpub\wwwroot\icthub\` |
+| `swp-logo.png` | `E:\inetpub\wwwroot\icthub\images\` |
 
-**Do not copy the dev database.** Production starts empty; the application creates it on first run. Dev content is test data.
+**Do not copy the dev database.** Production starts empty; the application creates it on first run. Dev content is test data and must not reach live displays.
+
+### ✅ Test gate 5
 
 ```powershell
-Test-Path C:\inetpub\SignageFeedAdmin\publish\SignageFeedAdmin.dll
-Test-Path C:\inetpub\SignageFeedAdmin\publish\web.config
-Test-Path C:\inetpub\SWPICTHub\index.html
-Test-Path C:\inetpub\SWPICTHub\images\swp-logo.png
+Test-Path E:\inetpub\wwwroot\signageadmin\SignageFeedAdmin.dll
+Test-Path E:\inetpub\wwwroot\signageadmin\web.config
+Test-Path E:\inetpub\wwwroot\icthub\index.html
+Test-Path E:\inetpub\wwwroot\icthub\images\swp-logo.png
+
+Select-String -Path E:\inetpub\wwwroot\signageadmin\appsettings.json -Pattern 'DbPath|KeyRingPath|AdminGroup'
 ```
 
-All four must be `True`.
+All four `True`, and the config showing the production paths.
 
 ---
 
-## Part 6 — IIS structure
+## Part 6 — ⚠ IIS site and application
 
-**`Default Web Site` is NOT stopped.** Other teams' applications depend on it. The v1.0 instruction to stop it does not apply to a shared server.
+`Default Web Site` is **not** modified. Your site is a sibling, matching how `signage` and `MeetingRoomHowTo` are set up.
 
-### 6.1 Application pools (both options)
+### 6.1 Application pools
 
 ```powershell
 Import-Module WebAdministration
 
-New-WebAppPool -Name "SWPICTHub"
-Set-ItemProperty IIS:\AppPools\SWPICTHub -Name managedRuntimeVersion -Value ""
+New-WebAppPool -Name "ICTHub"
+Set-ItemProperty IIS:\AppPools\ICTHub -Name managedRuntimeVersion -Value ""
 
 New-WebAppPool -Name "SignageAdminApp"
 Set-ItemProperty IIS:\AppPools\SignageAdminApp -Name managedRuntimeVersion -Value ""
 
-Get-ChildItem IIS:\AppPools | Select-Object Name, State, ManagedRuntimeVersion
+& "$env:windir\system32\inetsrv\appcmd.exe" list apppool
 ```
 
-Separate pools are mandatory, not tidiness: in-process hosting permits one ASP.NET Core application per worker process. Sharing a pool produces HTTP 503 on all requests while the pool reports as Started.
+Separate pools are mandatory: in-process ASP.NET Core hosting permits one application per worker process. Sharing a pool produces HTTP 503 on all requests while the pool reports as Started.
 
----
-
-### Option A — Own site with an SNI binding (preferred)
-
-Use when the hostname belongs to this application and another site already holds a catch-all 443 binding.
-
-Gives you the Hub at the root, complete separation from `Default Web Site`, and no inherited configuration.
+### 6.2 Site, bindings and application
 
 ```powershell
-# Site: Hub at the root, HTTPS with SNI so it coexists with any catch-all binding
+$ip   = "10.129.242.24"
+$host = "swpapp-digisign.swp-rest.police.int"
+$cert = "03BD544B9A511AB31445C19B0D8B20179539197D"
+
+# Site: ICT Hub at the root
 New-Website -Name "SWPDigiSign" `
-  -PhysicalPath "C:\inetpub\SWPICTHub" `
-  -ApplicationPool "SWPICTHub" `
-  -HostHeader "swpapp-digisign.swp-rest.police.int" `
-  -Port 443 -Ssl -SslFlags 1
+  -PhysicalPath "E:\inetpub\wwwroot\icthub" `
+  -ApplicationPool "ICTHub" `
+  -IPAddress $ip -Port 80 -HostHeader $host
 
-# HTTP binding on the same hostname - required for the BrightSign feed path
-New-WebBinding -Name "SWPDigiSign" -Protocol http -Port 80 `
-  -HostHeader "swpapp-digisign.swp-rest.police.int"
+# HTTPS binding with SNI, so it coexists with Default Web Site's catch-all
+New-WebBinding -Name "SWPDigiSign" -Protocol https `
+  -IPAddress $ip -Port 443 -HostHeader $host -SslFlags 1
 
-# Bind the certificate. SNI bindings are registered per hostname:port.
-$certThumb = "<thumbprint from Part 2>"
-$cert = Get-Item "Cert:\LocalMachine\My\$certThumb"
-New-Item -Path "IIS:\SslBindings\!443!swpapp-digisign.swp-rest.police.int" -Value $cert -SSLFlags 1
+# Attach the certificate to the SNI binding
+$c = Get-Item "Cert:\LocalMachine\My\$cert"
+New-Item -Path "IIS:\SslBindings\$ip!443!$host" -Value $c -SSLFlags 1
 
 # Feed Admin as an application beneath the site
 New-WebApplication -Site "SWPDigiSign" -Name "signageadmin" `
-  -PhysicalPath "C:\inetpub\SignageFeedAdmin\publish" `
+  -PhysicalPath "E:\inetpub\wwwroot\signageadmin" `
   -ApplicationPool "SignageAdminApp"
 
-Get-WebBinding -Name "SWPDigiSign" | Select-Object protocol, bindingInformation
-Get-WebApplication -Site "SWPDigiSign" | Format-List Path, PhysicalPath, ApplicationPool
+& "$env:windir\system32\inetsrv\appcmd.exe" list site
+& "$env:windir\system32\inetsrv\appcmd.exe" list app
 netsh http show sslcert
 ```
 
-⚠ **Immediately check another team's application still responds.** Adding an SNI binding should not disturb a catch-all, but confirm rather than assume.
+The HTTP binding is required — the BrightSign feed path is served over HTTP under the documented security exception.
 
-Resulting URLs:
-
-| URL | Serves |
-|---|---|
-| `https://swpapp-digisign.swp-rest.police.int/` | ICT Hub |
-| `https://swpapp-digisign.swp-rest.police.int/signageadmin` | Feed picker |
-| `http://swpapp-digisign.swp-rest.police.int/signageadmin/feeds/rss/<unit>.xml` | Published feed |
-
----
-
-### Option B — Applications under Default Web Site
-
-Use only if the hostname is shared with other applications, or you are not permitted to add a site.
-
-Same pattern as dev. No binding work, but the Hub cannot sit at the root, and both applications inherit `Default Web Site`'s configuration.
+### ✅ Test gate 6
 
 ```powershell
-# Check what would be inherited BEFORE creating anything
-$dwsPath = (Get-Website -Name "Default Web Site").PhysicalPath
-$dwsPath
-Test-Path "$dwsPath\web.config"
-if (Test-Path "$dwsPath\web.config") { Get-Content "$dwsPath\web.config" }
+& "$env:windir\system32\inetsrv\appcmd.exe" list site
+curl.exe -I http://meetingroomhowto.swp-rest.police.int/
+curl.exe -I http://swpapp-digisign.swp-rest.police.int/signage
+curl.exe -I https://swpapp-digisign.swp-rest.police.int/
 ```
 
-If that `web.config` exists and contains anything — rewrite rules, custom headers, authentication settings — **stop and send it to me**. It will apply to your applications too.
+Required: all four sites Started, both existing sites still responding, and the new site answering on both protocols. The application itself will not work yet — permissions and authentication follow.
+
+### 6.3 Permissions
 
 ```powershell
-New-WebApplication -Site "Default Web Site" -Name "feedhub" `
-  -PhysicalPath "C:\inetpub\SWPICTHub" -ApplicationPool "SWPICTHub"
+icacls "E:\SignageFeedAdmin\data" /grant "IIS AppPool\SignageAdminApp:(OI)(CI)(M)"
+icacls "E:\SignageFeedAdmin\keys" /grant "IIS AppPool\SignageAdminApp:(OI)(CI)(M)"
+icacls "E:\inetpub\wwwroot\signageadmin\wwwroot\feeds" /grant "IIS AppPool\SignageAdminApp:(OI)(CI)(M)"
 
-New-WebApplication -Site "Default Web Site" -Name "signageadmin" `
-  -PhysicalPath "C:\inetpub\SignageFeedAdmin\publish" -ApplicationPool "SignageAdminApp"
-
-Get-WebApplication -Site "Default Web Site" |
-  Where-Object { $_.Path -match 'feedhub|signageadmin' } |
-  Format-List Path, PhysicalPath, ApplicationPool
-```
-
-Confirm `Default Web Site` has an HTTP binding — the feed path needs it. If it is HTTPS only, add one:
-
-```powershell
-New-WebBinding -Name "Default Web Site" -Protocol http -Port 80 `
-  -HostHeader "swpapp-digisign.swp-rest.police.int"
-```
-
----
-
-### 6.4 Permissions (both options)
-
-```powershell
-icacls "C:\inetpub\SignageFeedAdmin\data" /grant "IIS AppPool\SignageAdminApp:(OI)(CI)(M)"
-icacls "C:\inetpub\SignageFeedAdmin\keys" /grant "IIS AppPool\SignageAdminApp:(OI)(CI)(M)"
-icacls "C:\inetpub\SignageFeedAdmin\publish\wwwroot\feeds" /grant "IIS AppPool\SignageAdminApp:(OI)(CI)(M)"
-
-icacls "C:\inetpub\SignageFeedAdmin\data"
-icacls "C:\inetpub\SignageFeedAdmin\keys"
+icacls "E:\SignageFeedAdmin\data"
+icacls "E:\SignageFeedAdmin\keys"
 ```
 
 ---
 
 ## Part 7 — Authentication
 
-Substitute `<SITE>` with `SWPDigiSign` (Option A) or `Default Web Site` (Option B), and `<HUB>` with `SWPDigiSign` (Option A — the site root is the Hub) or `Default Web Site/feedhub` (Option B).
-
 **Windows Auth on first, anonymous off second.** Reversing the order locks the application out entirely.
 
 ```powershell
-$hub   = "<HUB>"
-$admin = "<SITE>/signageadmin"
-
-# Hub
-Set-WebConfigurationProperty -PSPath "IIS:\" -Location $hub `
+# ICT Hub (site root)
+Set-WebConfigurationProperty -PSPath "IIS:\" -Location "SWPDigiSign" `
   -Filter "/system.webServer/security/authentication/windowsAuthentication" -Name enabled -Value $true
-Set-WebConfigurationProperty -PSPath "IIS:\" -Location $hub `
+Set-WebConfigurationProperty -PSPath "IIS:\" -Location "SWPDigiSign" `
   -Filter "/system.webServer/security/authentication/anonymousAuthentication" -Name enabled -Value $false
 
 # Feed Admin
-Set-WebConfigurationProperty -PSPath "IIS:\" -Location $admin `
+Set-WebConfigurationProperty -PSPath "IIS:\" -Location "SWPDigiSign/signageadmin" `
   -Filter "/system.webServer/security/authentication/windowsAuthentication" -Name enabled -Value $true
-Set-WebConfigurationProperty -PSPath "IIS:\" -Location $admin `
+Set-WebConfigurationProperty -PSPath "IIS:\" -Location "SWPDigiSign/signageadmin" `
   -Filter "/system.webServer/security/authentication/anonymousAuthentication" -Name enabled -Value $false
 
 # Anonymous identity must be the application pool, not IUSR.
 # This is what the /feeds carve-out inherits.
-Set-WebConfigurationProperty -PSPath "IIS:\" -Location $admin `
+Set-WebConfigurationProperty -PSPath "IIS:\" -Location "SWPDigiSign/signageadmin" `
   -Filter "/system.webServer/security/authentication/anonymousAuthentication" -Name userName -Value ""
 ```
 
-Under Option B these are scoped to the applications, so other applications under `Default Web Site` are unaffected.
+These are scoped to your site, so the other three sites are unaffected.
 
-If a command fails with a lock error, go to Part 8 — but read 8.1 first.
+The `/feeds` anonymous carve-out needs nothing here — it lives in the application's own `web.config` and travels with the deployment.
 
 ---
 
 ## Part 8 — ⚠ Scoped anonymous unlock
 
-The `<location path="feeds">` block in `web.config` overrides anonymous authentication for the feed path. IIS refuses that override unless the section is unlocked for the application.
+The `<location path="feeds">` block overrides anonymous authentication for the feed path. IIS refuses that override unless the section is unlocked for the application.
 
-### 8.1 Check the current state first
-
-```powershell
-Get-WebConfiguration -PSPath "MACHINE/WEBROOT/APPHOST" `
-  -Filter "/system.webServer/security/authentication/anonymousAuthentication" |
-  Select-Object OverrideMode, OverrideModeEffective
-```
-
-**If this reads `Deny` (the default):** proceed to 8.2. Add only the scoped unlock; do not touch the global setting.
-
-**If this reads `Allow`:** somebody unlocked it server-wide. Another application may depend on it. **Do not lock it as part of this deployment.** Add your scoped unlock, leave the global setting alone, and raise the server-wide unlock separately as a finding for the server owner. Tightening someone else's configuration during your own change is how an unrelated outage gets attributed to you.
-
-### 8.2 Scoped unlock
+The survey found the global lock at `Deny` — the correct default — so this stage only adds a scoped unlock. **Do not unlock server-wide.**
 
 ```powershell
-# Only if 8.1 showed Deny - establishes the correct default explicitly
-Set-WebConfiguration -PSPath "MACHINE/WEBROOT/APPHOST" `
-  -Filter "/system.webServer/security/authentication/anonymousAuthentication" `
-  -Metadata overrideMode -Value Deny
-
-# Always: unlock for this application only
-Set-WebConfiguration -PSPath "MACHINE/WEBROOT/APPHOST" `
-  -Location "<SITE>/signageadmin" `
-  -Filter "/system.webServer/security/authentication/anonymousAuthentication" `
-  -Metadata overrideMode -Value Allow
-
-# Verify
+# Confirm the global default is still Deny before proceeding
 Get-WebConfiguration -PSPath "MACHINE/WEBROOT/APPHOST" `
   -Filter "/system.webServer/security/authentication/anonymousAuthentication" |
   Select-Object OverrideMode, OverrideModeEffective
 
-Get-WebConfiguration -PSPath "MACHINE/WEBROOT/APPHOST" -Location "<SITE>/signageadmin" `
+# Unlock for this application only
+Set-WebConfiguration -PSPath "MACHINE/WEBROOT/APPHOST" `
+  -Location "SWPDigiSign/signageadmin" `
+  -Filter "/system.webServer/security/authentication/anonymousAuthentication" `
+  -Metadata overrideMode -Value Allow
+
+# Verify: global Deny, application Allow
+Get-WebConfiguration -PSPath "MACHINE/WEBROOT/APPHOST" `
+  -Filter "/system.webServer/security/authentication/anonymousAuthentication" |
+  Select-Object OverrideMode, OverrideModeEffective
+
+Get-WebConfiguration -PSPath "MACHINE/WEBROOT/APPHOST" -Location "SWPDigiSign/signageadmin" `
   -Filter "/system.webServer/security/authentication/anonymousAuthentication" |
   Select-Object OverrideMode, OverrideModeEffective
 ```
 
-Global `Deny`, application `Allow`.
-
-⚠ **Then check two other teams' applications still work.** If either broke, revert the global setting immediately:
-
-```powershell
-Set-WebConfiguration -PSPath "MACHINE/WEBROOT/APPHOST" `
-  -Filter "/system.webServer/security/authentication/anonymousAuthentication" `
-  -Metadata overrideMode -Value Allow
-```
+If the global setting reads anything other than `Deny`, stop and report it — something changed since the survey.
 
 ---
 
 ## Part 9 — Start and verify
 
 ```powershell
-Start-WebAppPool -Name "SWPICTHub"
+Start-WebAppPool -Name "ICTHub"
 Start-WebAppPool -Name "SignageAdminApp"
-# Option A only:
 Start-Website -Name "SWPDigiSign"
+
+& "$env:windir\system32\inetsrv\appcmd.exe" list site
+& "$env:windir\system32\inetsrv\appcmd.exe" list apppool
 ```
 
 ### 9.1 Did the application start?
@@ -512,30 +428,30 @@ Get-WinEvent -FilterHashtable @{LogName='Application'; ProviderName='IIS AspNetC
   Format-List TimeCreated, Id, Message
 ```
 
-You want **"started successfully"**. Configuration is validated at startup — a failure here names the offending feed.
+You want **"started successfully"**. Configuration is validated at startup and the application refuses to start on a bad feed definition — a failure here names the offending feed.
 
 ### 9.2 Did it create its files?
 
 ```powershell
-Get-ChildItem C:\inetpub\SignageFeedAdmin\data      # feed.db
-Get-ChildItem C:\inetpub\SignageFeedAdmin\keys      # key-*.xml
-Get-ChildItem C:\inetpub\SignageFeedAdmin\publish\wwwroot\feeds\rss   # 4 XML files
+Get-ChildItem E:\SignageFeedAdmin\data                                    # feed.db
+Get-ChildItem E:\SignageFeedAdmin\keys                                    # key-*.xml
+Get-ChildItem E:\inetpub\wwwroot\signageadmin\wwwroot\feeds\rss           # 4 XML files
 ```
 
-If `feeds\rss` is empty, the pool cannot write there — recheck Part 6.4.
+Four XML files — `servicedesk`, `systems`, `datacenter`, `news` — valid but empty. An empty `feeds\rss` means the pool cannot write there; recheck Part 6.3.
 
 ### 9.3 Browser checks
 
 | Check | Expected |
 |---|---|
-| Hub URL | Renders, logo visible, four tiles, no certificate warning |
+| `https://swpapp-digisign.swp-rest.police.int/` | Hub renders, logo visible, four tiles, no certificate warning |
 | Click a tile | Item list, signed in as you, no prompt |
 | Add, edit, delete an item | Works; feed republishes |
 | Audit log | Shows your changes |
 | `← ICT Hub` link | Returns to the Hub |
-| Private window on the HTTP feed URL | Raw XML, **no credential prompt** |
+| Private window on `http://swpapp-digisign.swp-rest.police.int/signageadmin/feeds/rss/datacenter.xml` | Raw XML, **no credential prompt** |
 
-The last is the critical test — it is the anonymous carve-out the 64 players depend on.
+The last is the critical test — the anonymous carve-out the 64 players depend on.
 
 ### 9.4 Data Protection
 
@@ -545,11 +461,17 @@ Add an item, then:
 Restart-WebAppPool -Name "SignageAdminApp"
 ```
 
-Return to an already-open edit page and save. It must succeed. HTTP 400 means the key ring is not persisting — check the `keys` folder and its permissions.
+Return to an already-open edit page and save. It must succeed. HTTP 400 means the key ring is not persisting — check `E:\SignageFeedAdmin\keys` and its permissions.
 
-### 9.5 ⚠ Other applications
+### ✅ Test gate 9 — other sites
 
-Browse two or three other applications on this server. This is the last chance to catch collateral damage while the cause is obvious.
+```powershell
+curl.exe -I http://meetingroomhowto.swp-rest.police.int/
+curl.exe -I http://swpapp-digisign.swp-rest.police.int/signage
+curl.exe -I http://swpapp-digisign.swp-rest.police.int/
+```
+
+Last chance to catch collateral damage while the cause is still obvious.
 
 ---
 
@@ -564,22 +486,22 @@ http://swpapp-digisign.swp-rest.police.int/signageadmin/feeds/rss/datacenter.xml
 http://swpapp-digisign.swp-rest.police.int/signageadmin/feeds/rss/news.xml
 ```
 
-**HTTP, not HTTPS** — the documented security exception.
+**HTTP, not HTTPS** — the documented security exception. The BrightSign feed subsystem cannot validate the internal CA and offers no bypass.
 
-1. Repoint **one** player. Add a distinctive test item and confirm it appears.
+1. Repoint **one** player. Add a distinctive test item and confirm it appears on the display.
 2. Allow a full poll cycle; players cache, so an immediate blank is not necessarily failure.
-3. Only then roll out to the group.
+3. Only then roll out to the group in BrightAuthor:connected.
 4. Each display takes two feeds: its business unit's, plus `news.xml`.
 
 If a player does not update:
 
 ```powershell
-Get-ChildItem C:\inetpub\logs\LogFiles\W3SVC*\*.log |
+Get-ChildItem E:\inetpub\logs\LogFiles\W3SVC4\*.log |
   Sort-Object LastWriteTime -Descending | Select-Object -First 1 |
   Get-Content | Select-String 'rss' | Select-Object -Last 20
 ```
 
-No entry from the player's IP means the request never arrived — network or URL, not the application.
+Your site will be id 4, so `W3SVC4`. No entry from the player's IP means the request never arrived — network or URL, not the application.
 
 ---
 
@@ -587,56 +509,53 @@ No entry from the player's IP means the request never arrived — network or URL
 
 - [ ] Populate the four AD groups with real business unit editors
 - [ ] Confirm isolation with an account in one group only — refused on another unit's URL typed directly, and `?all=true` on its audit page returns only its own feed
-- [ ] Add `C:\inetpub\SignageFeedAdmin\data` to the server backup scope
-- [ ] Record the certificate renewal date and the rebinding requirement
-- [ ] If Part 8.1 found a server-wide unlock, raise it with the server owner as a separate finding
+- [ ] Add `E:\SignageFeedAdmin\data` to the server backup scope
+- [ ] Record certificate renewal (29 June 2029) and the rebinding requirement
 - [ ] Update Technical Documentation and User Guide with production URLs
 - [ ] Refresh the source backup
+- [ ] Raise removal of the abandoned `signage` site (id 2) and `Default Web Site/signage` as a separate tidy-up
 - [ ] Decommission the dev instance, or mark it clearly as non-production
 
 ---
 
-## Impact on other applications (for the change request)
+## Impact on other services (for the change request)
 
 | Step | Impact | Mitigation |
 |---|---|---|
-| Hosting Bundle install (Part 1.2) | IIS restart — brief outage for **every** application on the server | Scheduled window; skip entirely if already installed |
-| Windows Auth role service (Part 1.1) | May restart IIS | Usually already present; check first |
-| New site and SNI binding (Part 6, Option A) | None expected — SNI coexists with catch-all bindings | Verify another application immediately after |
-| New applications under Default Web Site (Part 6, Option B) | None — additive only | Verify after |
-| Anonymous unlock (Part 8) | Locking globally could break an application relying on a server-wide unlock | Check state first (8.1); do not lock if already unlocked |
-| Application pool creation | None | — |
+| Hosting Bundle install (1.2) | IIS restart — brief outage for all three existing sites | Scheduled window; test gate 1 confirms recovery |
+| Certificate rebind (2.2) | Restores HTTPS server-wide. Other hostnames on the certificate move from handshake failure to serving Default Web Site content — both wrong, neither worse. Those sites are HTTP-only and unaffected in normal use. | Test gate 2; single-command back-out |
+| New site and SNI binding (6.2) | None expected — SNI coexists with the catch-all | Test gate 6 |
+| Application pools (6.1) | None | — |
+| Authentication (7) | None — scoped to the new site | — |
+| Anonymous unlock (8) | None — scoped to the new application; global lock untouched | Verified before and after |
 
-Everything else is additive: new folders, new pools, new applications. Nothing existing is modified or removed.
+Everything except the Hosting Bundle install and the certificate rebind is purely additive. No existing site, application, pool or binding is modified or removed.
 
 ---
 
-## Back-out plan
+## Back-out
 
-Nothing existing is replaced, so back-out is stopping what was created. The dev instance continues serving the players until they are repointed.
+Nothing existing is replaced. Back-out is stopping what was created.
 
 ```powershell
-# Option A
+# Remove the new site and pools
 Stop-Website -Name "SWPDigiSign"
-Stop-WebAppPool -Name "SignageAdminApp"
-Stop-WebAppPool -Name "SWPICTHub"
+Remove-Website -Name "SWPDigiSign"
+Remove-WebAppPool -Name "SignageAdminApp"
+Remove-WebAppPool -Name "ICTHub"
 
-# Option B
-Remove-WebApplication -Site "Default Web Site" -Name "signageadmin"
-Remove-WebApplication -Site "Default Web Site" -Name "feedhub"
-Stop-WebAppPool -Name "SignageAdminApp"
-Stop-WebAppPool -Name "SWPICTHub"
-```
-
-If Part 8 broke another application, revert the global lock:
-
-```powershell
+# Remove the scoped unlock
 Set-WebConfiguration -PSPath "MACHINE/WEBROOT/APPHOST" `
+  -Location "SWPDigiSign/signageadmin" `
   -Filter "/system.webServer/security/authentication/anonymousAuthentication" `
-  -Metadata overrideMode -Value Allow
+  -Metadata overrideMode -Value Deny
 ```
 
-If players have already been repointed, revert them to the dev URLs in BrightAuthor:connected.
+Certificate rebind back-out is in Part 2.2. The Hosting Bundle can be left installed — it affects nothing that is not using it.
+
+Folders under `E:\inetpub\wwwroot\signageadmin`, `E:\inetpub\wwwroot\icthub` and `E:\SignageFeedAdmin` can then be removed manually.
+
+If players have already been repointed, revert them to the dev URLs in BrightAuthor:connected. The dev instance continues serving until they are.
 
 ---
 
@@ -650,8 +569,8 @@ If players have already been repointed, revert them to the dev URLs in BrightAut
 | HTTP 400 on Save after a recycle | Data Protection key ring not persisting — Part 9.4 |
 | Feed 404s but admin pages work | `<location path="feeds">` missing its `<handlers>` block, or path written as `wwwroot/feeds` |
 | Application will not start | Configuration validation failed; the Event Log names the feed |
-| HTTPS fails months later | Certificate renewed with a new thumbprint; binding still points at the old one |
+| `WebAdministration` cmdlets return nothing | Known on this server. Use `appcmd` for enumeration. |
+| HTTPS fails again in 2029 | Certificate renewed with a new thumbprint; binding still points at the old one |
 | Feed works over HTTP but not HTTPS on players | Expected. Documented exception. Do not "fix" by forcing HTTPS. |
-| Another team's app breaks after Part 8 | It relied on the server-wide unlock. Revert and raise separately. |
 
 **Do not add an HTTP-to-HTTPS redirect to this site.** It would break the feed for all 64 players. If policy later requires one, it must exclude `/signageadmin/feeds`.
