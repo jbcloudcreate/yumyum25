@@ -80,7 +80,21 @@ Test-Path C:\Windows\System32\inetsrv\appcmd.exe
 # What is actually listening
 Get-NetTCPConnection -State Listen -LocalPort 80,443 |
   Select-Object LocalAddress, LocalPort, OwningProcess
+
+& "$env:windir\system32\inetsrv\appcmd.exe" list vdir
+& "$env:windir\system32\inetsrv\appcmd.exe" list site /text:*
+
+Get-ChildItem "C:\inetpub" -Directory
+
+(Get-Item Cert:\LocalMachine\My\03BD544B9A511AB31445C19B0D8B20179539197D).DnsNameList |
+  Select-Object Punycode
+
+Get-NetTCPConnection -State Listen | Where-Object LocalPort -in 80,443 |
+  Select-Object LocalAddress, LocalPort, OwningProcess
 ```
+
+http/10.129.242.24:80:signage
+http/10.129.242.24:80:MeetingRoomHowTo.swp-rest.police.int
 
 ### How to read the output
 
