@@ -459,3 +459,6 @@ Corrected in Deployment Runbook v3.1:
 | `Mark` called without quotes | Documented — `Mark "Part 2 - text"`, not `Mark Part 2 - text`. |
 | Hub placed at the site root | Placed at `/feedhub` to match dev, with a redirect at the root. |
 | Hub file source not stated | Identified as the dev server at `C:\inetpub\SWPICTHub\`. |
+
+Get-WinEvent -FilterHashtable @{LogName='Application'; ProviderName='IIS AspNetCore Module V2'} -MaxEvents 3 |
+  Format-List TimeCreated, Id, Message
