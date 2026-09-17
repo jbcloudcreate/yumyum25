@@ -91,6 +91,26 @@ Get-ChildItem "C:\inetpub" -Directory
 
 Get-NetTCPConnection -State Listen | Where-Object LocalPort -in 80,443 |
   Select-Object LocalAddress, LocalPort, OwningProcess
+
+'swpapp-digisign','digitalsignage','brightsign','ict' | ForEach-Object {
+    $n = "$_.swp-rest.police.int"
+    try {
+        $r = Resolve-DnsName $n -ErrorAction Stop | Where-Object Type -eq 'A'
+        "{0,-45} {1}" -f $n, ($r.IPAddress -join ', ')
+    } catch { "{0,-45} does not resolve" -f $n }
+}
+
+# Anything hitting site 2 or the /signage path recently?
+Get-ChildItem E:\inetpub\logs\LogFiles -Recurse -Filter *.log |
+  Sort-Object LastWriteTime -Descending | Select-Object -First 5 FullName, LastWriteTime
+
+Get-ChildItem E:\inetpub\logs\LogFiles\W3SVC2\*.log |
+  Sort-Object LastWriteTime -Descending | Select-Object -First 1 |
+  Get-Content | Select-Object -Last 20
+
+# What's actually in there
+Get-ChildItem E:\inetpub\wwwroot\signage -Recurse -File |
+  Select-Object FullName, Length, LastWriteTime
 ```
 
 http/10.129.242.24:80:signage
