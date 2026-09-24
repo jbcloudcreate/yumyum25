@@ -1,0 +1,22 @@
+**SWPDEV-ICTWEB — tidied up ahead of decommissioning**
+
+QuickLinks has moved to https://uctools/quicklinks/. The old address now forwards there automatically, so existing links and bookmarks will still get you to the right place. Worth re-bookmarking the new address though — the forward only works while the old server is still up, and that's due to be powered off in a fortnight.
+
+Everything else on that box has been switched off:
+
+• Server home page
+• UD
+• UC Dashboard
+• ETS Dashboard
+• User Management
+• Chatbot
+• IIS Test
+• WAC
+• AD Lockouts
+• IL3 Checks
+
+Signage Feed Admin and the Signage Feed Hub were already offline.
+
+If you were using any of these, give me a shout and I'll get it back up.
+
+Back-out
