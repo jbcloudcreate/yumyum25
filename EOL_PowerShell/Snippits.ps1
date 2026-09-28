@@ -1,3 +1,6 @@
+Get-CimInstance Win32_ComputerSystem | Select-Object Model
+Get-CimInstance Win32_VideoController | Select-Object Name
+
 <?xml version="1.0" encoding="utf-8"?>
 <configuration>
   <location path="." inheritInChildApplications="false">
