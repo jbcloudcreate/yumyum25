@@ -1,3 +1,20 @@
+# Services and processes
+Get-CimInstance Win32_Service | Where-Object { $_.PathName -match 'NetMotion|Absolute|Mobility' } |
+  Select-Object Name, State, PathName
+Get-Process | Where-Object { $_.Path -match 'NetMotion|Absolute|Mobility' } | Select-Object Name, Path
+
+# Install and data folders
+Get-ChildItem 'C:\Program Files*', 'C:\ProgramData' -Directory |
+  Where-Object Name -match 'NetMotion|Absolute' | Select-Object FullName
+
+# Kernel drivers (the client uses network filter drivers)
+Get-CimInstance Win32_SystemDriver | Where-Object { $_.PathName -match 'nm|NetMotion|Absolute' } |
+  Select-Object Name, State, PathName
+
+New-MpPerformanceRecording -RecordTo C:\Temp\nm.etl
+# Connect, switch networks (e.g. Wi-Fi to 4G), reconnect, then press Enter to stop
+Get-MpPerformanceReport -Path C:\Temp\nm.etl -TopProcesses 10 -TopFiles 10
+
 Get-CimInstance Win32_ComputerSystem | Select-Object Model
 Get-CimInstance Win32_VideoController | Select-Object Name
 
