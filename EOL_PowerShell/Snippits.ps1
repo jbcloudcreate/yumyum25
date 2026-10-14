@@ -1,3 +1,6 @@
+Get-ItemProperty HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*, HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\* |
+  Where-Object DisplayName | Select-Object DisplayName, Publisher, InstallLocation | Sort-Object DisplayName
+
 # Services and processes
 Get-CimInstance Win32_Service | Where-Object { $_.PathName -match 'NetMotion|Absolute|Mobility' } |
   Select-Object Name, State, PathName
