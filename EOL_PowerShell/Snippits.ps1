@@ -1,3 +1,19 @@
+# 1. Ask Windows Installer about this product (5 = installed, -1 = unknown)
+$inst = New-Object -ComObject WindowsInstaller.Installer
+$code = '{A33B0230-6095-48B2-A19E-F1979B595BBD}'
+$get  = { param($p) $inst.GetType().InvokeMember('ProductInfo','GetProperty',$null,$inst,@($code,$p)) }
+[pscustomobject]@{
+    State           = $inst.GetType().InvokeMember('ProductState','GetProperty',$null,$inst,@($code))
+    InstallLocation = & $get 'InstallLocation'
+    InstallSource   = & $get 'InstallSource'
+}
+
+# 2. Look for Absolute or NetMotion folders up to 3 levels deep on every fixed drive
+Get-CimInstance Win32_LogicalDisk -Filter 'DriveType=3' | ForEach-Object {
+    Get-ChildItem "$($_.DeviceID)\" -Directory -Recurse -Depth 3 -ErrorAction SilentlyContinue |
+      Where-Object Name -match 'NetMotion|Absolute'
+} | Select-Object FullName
+
 Get-ItemProperty HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*, HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\* |
   Where-Object DisplayName -like 'Absolute*' |
   Select-Object DisplayName, DisplayVersion, InstallDate, InstallLocation, UninstallString
