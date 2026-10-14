@@ -1,4 +1,8 @@
 Get-ItemProperty HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*, HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\* |
+  Where-Object DisplayName -like 'Absolute*' |
+  Select-Object DisplayName, DisplayVersion, InstallDate, InstallLocation, UninstallString
+
+Get-ItemProperty HKLM:\Software\Microsoft\Windows\CurrentVersion\Uninstall\*, HKLM:\Software\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\* |
   Where-Object DisplayName | Select-Object DisplayName, Publisher, InstallLocation | Sort-Object DisplayName
 
 # Services and processes
