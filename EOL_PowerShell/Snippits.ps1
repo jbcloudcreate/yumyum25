@@ -18,6 +18,20 @@ Get-MpPerformanceReport -Path C:\Temp\nm.etl -TopProcesses 10 -TopFiles 10
 Get-CimInstance Win32_ComputerSystem | Select-Object Model
 Get-CimInstance Win32_VideoController | Select-Object Name
 
+# Corrected: list folders inside Program Files and ProgramData
+Get-ChildItem 'C:\Program Files\*', 'C:\Program Files (x86)\*', 'C:\ProgramData\*' -Directory -ErrorAction SilentlyContinue |
+  Where-Object Name -match 'NetMotion|Absolute' | Select-Object FullName
+
+# Confirm who made each driver
+Get-ChildItem C:\Windows\System32\drivers\nm*.sys, C:\Windows\System32\drivers\winmad.sys -ErrorAction SilentlyContinue |
+  ForEach-Object { [pscustomobject]@{
+    Name    = $_.Name
+    Company = $_.VersionInfo.CompanyName
+    Signer  = (Get-AuthenticodeSignature $_.FullName).SignerCertificate.Subject } }
+
+# Check whether locally added exclusions will be honoured (True means local ones are ignored)
+(Get-MpPreference).DisableLocalAdminMerge
+
 <?xml version="1.0" encoding="utf-8"?>
 <configuration>
   <location path="." inheritInChildApplications="false">
