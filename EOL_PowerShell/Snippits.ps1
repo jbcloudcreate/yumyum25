@@ -1,3 +1,8 @@
+'SWPHQ-MBS01','SWPHQ-MBS02','SWPHQ-MBS03' | % { Get-WinEvent -ComputerName $_ -FilterHashtable @{LogName='Microsoft-Exchange-HighAvailability/Operational';StartTime=[datetime]'2026-10-14 08:00'} -EA SilentlyContinue |
+ ? { $_.Message -match "'MB2'" -and $_.Id -in 337,2037,2099,837 } | select MachineName,TimeCreated,Id,Message } | sort TimeCreated | ft -AutoSize -Wrap
+
+ 
+
 Did the reboot fix it?
 
 Get-MailboxDatabaseCopyStatus -Server SWPHQ-MBS01 | ft Name,Status,CopyQueueLength,ReplayQueueLength,ContentIndexState -AutoSize
