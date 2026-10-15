@@ -1,3 +1,25 @@
+Step 1: Exact boot times, and whether the FW servers were patched too
+
+'SWPHQ-MBS01','SWPHQ-MBS02','SWPHQ-MBS03','SWPFW-MBS04','SWPFW-MBS05' | % {
+ Get-WinEvent -ComputerName $_ -FilterHashtable @{LogName='System';Id=6005;StartTime=[datetime]'2026-10-14 00:00'} -EA SilentlyContinue |
+  select @{n='Server';e={$_.MachineName}},TimeCreated } | sort Server,TimeCreated | ft -AutoSize
+'SWPFW-MBS04','SWPFW-MBS05' | % { Get-HotFix -ComputerName $_ | ? InstalledOn -ge (Get-Date).AddDays(-7) } | select CSName,HotFixID,InstalledOn | ft -AutoSize
+
+Event 6005 marks each boot. The HA log hinted at a second MBS01 restart around 11:22 yesterday, which would shift its figure slightly. If FW-MBS04 or FW-MBS05 got the same patches, they’re running on the same clock.
+
+Step 2: Resource baseline, to catch the leak building
+
+Run this now, then again in 2–3 hours. Look for numbers on 01 and 02 that keep climbing while 03 stays flat.
+
+'SWPHQ-MBS01','SWPHQ-MBS02','SWPHQ-MBS03' | % { Invoke-Command -ComputerName $_ -ScriptBlock {
+  $p = Get-Process Microsoft.Exchange.Store.* -EA SilentlyContinue
+  [pscustomobject]@{ Server=$env:COMPUTERNAME; Time=(Get-Date -f 'HH:mm')
+   StoreHandles=($p | Measure-Object Handles -Sum).Sum; StoreThreads=($p | % { $_.Threads.Count } | Measure-Object -Sum).Sum
+   TcpConns=(Get-NetTCPConnection).Count; TimeWait=(Get-NetTCPConnection -State TimeWait -EA SilentlyContinue).Count } } } |
+ ft Server,Time,StoreHandles,StoreThreads,TcpConns,TimeWait -AutoSize
+
+********************************
+
 Step 1: Did Exchange’s own health monitoring notice MB2 failing, and why didn’t it act?
 
 Get-WinEvent -ComputerName SWPHQ-MBS02 -FilterHashtable @{LogName='Microsoft-Exchange-ManagedAvailability/RecoveryActionResults';StartTime=[datetime]'2026-10-15 06:25';EndTime=[datetime]'2026-10-15 11:40'} -EA SilentlyContinue |
