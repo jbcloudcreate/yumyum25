@@ -1,3 +1,9 @@
+Get-MessageTrackingLog -Server SWPHQ-MBS02 -EventId DELIVER -Start ([datetime]'2026-10-14 08:00') -ResultSize Unlimited |
+ group { $_.Timestamp.ToString('dd/MM HH:00') } | select Name,Count | ft -AutoSize
+
+Test-MAPIConnectivity -Database MB2
+Get-ExchangeServer | ? IsHubTransportServer | Get-Queue | ? MessageCount -gt 0 | ft Identity,DeliveryType,Status,MessageCount,NextHopDomain -AutoSize
+
 'SWPHQ-MBS01','SWPHQ-MBS02','SWPHQ-MBS03' | % { Get-WinEvent -ComputerName $_ -FilterHashtable @{LogName='Microsoft-Exchange-HighAvailability/Operational';StartTime=[datetime]'2026-10-14 08:00'} -EA SilentlyContinue |
  ? { $_.Message -match "'MB2'" -and $_.Id -in 337,2037,2099,837 } | select MachineName,TimeCreated,Id,Message } | sort TimeCreated | ft -AutoSize -Wrap
 
