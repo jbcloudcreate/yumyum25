@@ -1,3 +1,37 @@
+Did the reboot fix it?
+
+Get-MailboxDatabaseCopyStatus -Server SWPHQ-MBS01 | ft Name,Status,CopyQueueLength,ReplayQueueLength,ContentIndexState -AutoSize
+Get-MailboxDatabaseCopyStatus -Server SWPHQ-MBS02 | ft Name,Status,CopyQueueLength,ReplayQueueLength,ContentIndexState -AutoSize
+Get-MailboxDatabaseCopyStatus "MB2\*" | ft Name,Status -AutoSize
+Test-MAPIConnectivity -Server SWPHQ-MBS01
+Test-MAPIConnectivity -Server SWPHQ-MBS02
+
+Draining?
+
+Get-ExchangeServer | ? IsHubTransportServer | Get-Queue | ? MessageCount -gt 0 | ft Identity,DeliveryType,Status,MessageCount,NextHopDomain,LastError -AutoSize -Wrap
+
+Out of maaint?
+
+Get-ExchangeServer | % { Get-ServerComponentState $_.Name | ? { $_.State -ne 'Active' -and $_.Component -notin 'ForwardSyncDaemon','ProvisioningRps' } | select ServerFqdn,Component,State }
+
+RCA
+
+'SWPHQ-MBS01','SWPHQ-MBS02','SWPHQ-MBS03' | % {
+  Get-WinEvent -ComputerName $_ -FilterHashtable @{LogName='Setup';StartTime=(Get-Date).AddDays(-2)} -EA SilentlyContinue |
+   select @{n='Server';e={$_.MachineName}},TimeCreated,Id,Message } | sort Server,TimeCreated | ft -AutoSize -Wrap
+'SWPHQ-MBS01','SWPHQ-MBS02','SWPHQ-MBS03' | % { Get-HotFix -ComputerName $_ | ? InstalledOn -ge (Get-Date).AddDays(-3) } | select CSName,HotFixID,InstalledOn | ft -AutoSize
+
+Get-MailboxDatabaseCopyStatus "MB2\*" | ft Name,Status,CopyQueueLength,ReplayQueueLength,ContentIndexState -AutoSize
+Test-MAPIConnectivity -Database MB2
+
+Get-Queue SWPHQ-MBS01\6 | fl Status,MessageCount,IncomingRate,OutgoingRate,Velocity,LastRetryTime,NextRetryTime,LastError
+Get-Message -Queue SWPHQ-MBS01\6 -ResultSize 3000 | sort DateReceived | select -First 1 DateReceived
+
+$m = Get-Message -Queue SWPHQ-MBS01\6 -ResultSize 3000
+$m | group FromAddress | sort Count -Descending | select -First 10 Count,Name | ft -AutoSize
+$m | group Subject | sort Count -Descending | select -First 10 Count,Name | ft -AutoSize
+$m | group Status,LastError | sort Count -Descending | select Count,Name | ft -AutoSize -Wrap
+
 Get-ExchangeServer | % { $s=$_.Name; Get-ExchangeCertificate -Server $s | ? NotAfter -lt (Get-Date).AddDays(30) |
  select @{n='Server';e={$s}},Thumbprint,Subject,NotAfter,Services } | ft -AutoSize
 
