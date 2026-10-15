@@ -1,3 +1,22 @@
+Step 1: What Windows Update and scheduled tasks did this morning
+
+'SWPHQ-MBS01','SWPHQ-MBS02' | % { Get-WinEvent -ComputerName $_ -FilterHashtable @{LogName='Microsoft-Windows-WindowsUpdateClient/Operational';StartTime=[datetime]'2026-10-15 00:00';EndTime=[datetime]'2026-10-15 12:00'} -EA SilentlyContinue |
+ select MachineName,TimeCreated,Id,Message } | sort TimeCreated | ft -AutoSize -Wrap
+Get-WinEvent -ComputerName SWPHQ-MBS02 -FilterHashtable @{LogName='Microsoft-Windows-TaskScheduler/Operational';StartTime=[datetime]'2026-10-15 06:05';EndTime=[datetime]'2026-10-15 06:35'} -EA SilentlyContinue |
+ select TimeCreated,Id,Message | ft -AutoSize -Wrap
+
+If the Task Scheduler query comes back empty, that log may be disabled, which is common on servers.
+
+Step 2: When MB1 failed on MBS01, and whether the same servicing activity happened there
+
+Get-WinEvent -ComputerName SWPHQ-MBS01 -FilterHashtable @{LogName='Application';StartTime=[datetime]'2026-10-14 11:30';EndTime=[datetime]'2026-10-15 11:50'} -EA SilentlyContinue |
+ ? { $_.Message -match 'MB1' -and $_.LevelDisplayName -in 'Error','Warning' } | sort TimeCreated |
+ select -First 10 TimeCreated,ProviderName,Id,@{n='Msg';e={($_.Message -split "`n")[0]}} | ft -AutoSize -Wrap
+Get-WinEvent -ComputerName SWPHQ-MBS01 -FilterHashtable @{LogName='System';Id=7036;StartTime=[datetime]'2026-10-14 11:30';EndTime=[datetime]'2026-10-15 11:50'} -EA SilentlyContinue |
+ ? Message -match 'Windows Modules Installer' | select TimeCreated,Message | ft -AutoSize
+
+*****************************
+
 Get-MessageTrackingLog -Server SWPHQ-MBS02 -EventId DELIVER -Start ([datetime]'2026-10-15 06:00') -End ([datetime]'2026-10-15 07:00') -ResultSize Unlimited |
  sort Timestamp | select -Last 1 Timestamp
 
