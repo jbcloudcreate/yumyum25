@@ -1,3 +1,24 @@
+$log = 'C:\Temp\INC-ExchStore-20261015\monitor2.csv'
+while ($true) {
+  $now = Get-Date
+  foreach ($s in 'SWPHQ-MBS01','SWPHQ-MBS02','SWPHQ-MBS03') {
+    $r = Invoke-Command -ComputerName $s -ScriptBlock {
+      $p   = Get-Process Microsoft.Exchange.Store.* -EA SilentlyContinue
+      $rpc = Get-Process -Id (Get-CimInstance Win32_Service -Filter "Name='RpcSs'").ProcessId
+      $c   = (Get-Counter '\Memory\Pool Nonpaged Bytes','\Memory\Pool Paged Bytes','\Memory\% Committed Bytes In Use','\Process(_Total)\Handle Count').CounterSamples
+      function v($m) { ($c | ? Path -like "*$m*").CookedValue }
+      [pscustomobject]@{ Up=[math]::Round(((Get-Date)-(Get-CimInstance Win32_OperatingSystem).LastBootUpTime).TotalHours,1)
+        H=($p|Measure-Object Handles -Sum).Sum; T=($p|%{$_.Threads.Count}|Measure-Object -Sum).Sum; RpcH=$rpc.Handles
+        NP=[int]((v 'pool nonpaged bytes')/1MB); PP=[int]((v 'pool paged bytes')/1MB); Commit=[math]::Round((v 'committed bytes in use'),1)
+        SysH=[int](v 'handle count'); Tcp=(Get-NetTCPConnection).Count } }
+    $mapi = (Get-MailboxDatabaseCopyStatus -Server $s | ? Status -eq 'Mounted' | % { "$($_.DatabaseName)=$((Test-MAPIConnectivity -Database $_.DatabaseName).Result)" }) -join ' '
+    [pscustomobject]@{ Time=$now.ToString('yyyy-MM-dd HH:mm'); Server=$s; UptimeH=$r.Up; StoreHandles=$r.H; StoreThreads=$r.T; RpcSsHandles=$r.RpcH
+      NonPagedMB=$r.NP; PagedMB=$r.PP; CommitPct=$r.Commit; SystemHandles=$r.SysH; TcpConns=$r.Tcp; MAPI=$mapi } | Export-Csv $log -Append -NoTypeInformation
+    if ($mapi -match 'FAILURE') { Write-Host "$now  $s  MAPI FAILURE: $mapi" -ForegroundColor Red }
+  }
+  Start-Sleep -Seconds 900
+}
+
 # 1. Server and time for every hit
 Import-Csv C:\Temp\INC-ExchStore-20261015\2-text\00-key-timeline.csv |
  ? Message -match 'Not enough memory resources' | select TimeLocal,Server,Provider,Id | ft -AutoSize
