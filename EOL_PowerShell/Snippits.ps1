@@ -8,6 +8,17 @@ Search-AdminAuditLog -Cmdlets Dismount-Database,Mount-Database,Move-ActiveMailbo
 Get-WinEvent -ComputerName SWPHQ-MBS01 -LogName 'Microsoft-Exchange-HighAvailability/Operational' -MaxEvents 500 |
  ? Message -match 'MB1' | select -First 20 TimeCreated,Id,LevelDisplayName,Message | fl
 
+Get-ExchangeServer | ? IsHubTransportServer | Get-Queue | ? MessageCount -gt 0 |
+ ft Identity,DeliveryType,Status,MessageCount,NextHopDomain,LastError -AutoSize -Wrap
+
+Get-WinEvent -ComputerName SWPHQ-MBS01 -FilterHashtable @{LogName='Application';Level=1,2,3;StartTime=[datetime]'2026-10-15 05:30';EndTime=[datetime]'2026-10-15 06:30'} |
+ sort TimeCreated | select TimeCreated,ProviderName,Id,LevelDisplayName,Message | fl
+
+Get-MailboxDatabaseCopyStatus "MB1\*" | fl Name,Status,LastStatusTransitionTime,ErrorMessage,LogVolumeFreeSpacePercent,DiskFreeSpacePercent
+Get-MailboxDatabase MB1 -Status | fl LastFullBackup,LastIncrementalBackup,BackupInProgress
+
+Get-ExchangeServer | % { Get-ServerComponentState $_.Name | ? State -ne 'Active' | select ServerFqdn,Component,State }
+
 # 1. Ask Windows Installer about this product (5 = installed, -1 = unknown)
 $inst = New-Object -ComObject WindowsInstaller.Installer
 $code = '{A33B0230-6095-48B2-A19E-F1979B595BBD}'
