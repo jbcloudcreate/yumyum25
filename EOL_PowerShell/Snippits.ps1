@@ -1,3 +1,7 @@
+Get-ChildItem C:\Temp\INC-ExchStore-20261015\2-text -Recurse -Filter *.csv |
+ Select-String -Pattern 'not enough memory|not enough storage|out of memory|insufficient system resources' |
+ select -First 30 Filename,LineNumber,Line | ft -AutoSize -Wrap
+
 Step 1: Exact boot times, and whether the FW servers were patched too
 
 'SWPHQ-MBS01','SWPHQ-MBS02','SWPHQ-MBS03','SWPFW-MBS04','SWPFW-MBS05' | % {
