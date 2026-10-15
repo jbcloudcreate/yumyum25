@@ -1,3 +1,20 @@
+Step 1: Did Exchange’s own health monitoring notice MB2 failing, and why didn’t it act?
+
+Get-WinEvent -ComputerName SWPHQ-MBS02 -FilterHashtable @{LogName='Microsoft-Exchange-ManagedAvailability/RecoveryActionResults';StartTime=[datetime]'2026-10-15 06:25';EndTime=[datetime]'2026-10-15 11:40'} -EA SilentlyContinue |
+ sort TimeCreated | select -First 30 TimeCreated,Id,LevelDisplayName,Message | ft -AutoSize -Wrap
+
+This shows whether Managed Availability tried to restart the store worker or fail MB2 over, and whether it was throttled or blocked. That’s the answer to why it ran broken for five hours.
+
+Step 2: MB1 on MBS01, the real first error and the tombstone history
+
+Get-WinEvent -ComputerName SWPHQ-MBS01 -FilterHashtable @{LogName='Application';StartTime=[datetime]'2026-10-14 11:30';EndTime=[datetime]'2026-10-15 11:50'} -EA SilentlyContinue |
+ ? { $_.Message -match 'MB1' -and $_.LevelDisplayName -in 'Error','Warning' -and $_.Id -notin 40013,40017 } | sort TimeCreated |
+ select -First 10 TimeCreated,ProviderName,Id,@{n='Msg';e={($_.Message -split "`n")[0]}} | ft -AutoSize -Wrap
+Get-WinEvent -ComputerName SWPHQ-MBS01 -FilterHashtable @{LogName='Application';Id=40013;StartTime=(Get-Date).AddDays(-7)} -EA SilentlyContinue |
+ group { $_.TimeCreated.ToString('MM/dd') } | sort Name | select @{n='Day (MM/dd)';e={$_.Name}},Count | ft -AutoSize
+
+****************************
+
 Step 1: What Windows Update and scheduled tasks did this morning
 
 'SWPHQ-MBS01','SWPHQ-MBS02' | % { Get-WinEvent -ComputerName $_ -FilterHashtable @{LogName='Microsoft-Windows-WindowsUpdateClient/Operational';StartTime=[datetime]'2026-10-15 00:00';EndTime=[datetime]'2026-10-15 12:00'} -EA SilentlyContinue |
