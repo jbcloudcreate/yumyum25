@@ -1,3 +1,13 @@
+Get-ExchangeServer | % { $s=$_.Name; Get-ExchangeCertificate -Server $s | ? NotAfter -lt (Get-Date).AddDays(30) |
+ select @{n='Server';e={$s}},Thumbprint,Subject,NotAfter,Services } | ft -AutoSize
+
+Get-AuthConfig | fl CurrentCertificateThumbprint,NextCertificateThumbprint,NextCertificateEffectiveDate
+
+Test-MAPIConnectivity -Database MB1
+Get-MailboxStatistics journaling@south-wales.police.uk | fl DisplayName,ItemCount,TotalItemSize
+Get-ExchangeServer | ? IsHubTransportServer | Get-Queue | ? MessageCount -gt 0 |
+ ft Identity,DeliveryType,Status,MessageCount,NextHopDomain,LastError -AutoSize -Wrap
+
 Why?
 Get-WinEvent -ComputerName SWPHQ-MBS01 -FilterHashtable @{LogName='Application';Level=1,2,3;StartTime=(Get-Date).AddDays(-2)} |
  ? Message -match 'MB1' | select -First 20 TimeCreated,ProviderName,Id,Message | fl
