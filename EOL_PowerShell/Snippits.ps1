@@ -1,3 +1,15 @@
+# 1. Server and time for every hit
+Import-Csv C:\Temp\INC-ExchStore-20261015\2-text\00-key-timeline.csv |
+ ? Message -match 'Not enough memory resources' | select TimeLocal,Server,Provider,Id | ft -AutoSize
+
+# 2. One full message, to see which process and component
+Import-Csv C:\Temp\INC-ExchStore-20261015\2-text\00-key-timeline.csv |
+ ? Message -match 'Not enough memory resources' | select -First 1 -ExpandProperty Message
+
+# 3. Has it started again since the 12:05 reboots? (leading indicator for tomorrow)
+'SWPHQ-MBS01','SWPHQ-MBS02','SWPHQ-MBS03' | % { Get-WinEvent -ComputerName $_ -FilterHashtable @{LogName='Microsoft-Exchange-ManagedAvailability/Monitoring';StartTime=[datetime]'2026-10-15 12:00'} -EA SilentlyContinue |
+ ? Message -match 'Not enough memory resources' | select MachineName,TimeCreated,Id } | ft -AutoSize
+
 Get-ChildItem C:\Temp\INC-ExchStore-20261015\2-text -Recurse -Filter *.csv |
  Select-String -Pattern 'not enough memory|not enough storage|out of memory|insufficient system resources' |
  select -First 30 Filename,LineNumber,Line | ft -AutoSize -Wrap
