@@ -1,3 +1,18 @@
+Get-MessageTrackingLog -Server SWPHQ-MBS02 -EventId DELIVER -Start ([datetime]'2026-10-15 06:00') -End ([datetime]'2026-10-15 07:00') -ResultSize Unlimited |
+ sort Timestamp | select -Last 1 Timestamp
+
+'Application','System' | % { $log=$_
+ Get-WinEvent -ComputerName SWPHQ-MBS02 -FilterHashtable @{LogName=$log;StartTime=[datetime]'2026-10-15 05:50';EndTime=[datetime]'2026-10-15 06:45'} -EA SilentlyContinue |
+  ? Id -ne 12015 | select @{n='Log';e={$log}},TimeCreated,ProviderName,Id,LevelDisplayName,Message } |
+ sort TimeCreated | ft -AutoSize -Wrap
+Get-WinEvent -ComputerName SWPHQ-MBS02 -FilterHashtable @{LogName='Microsoft-Windows-Windows Defender/Operational';StartTime=[datetime]'2026-10-15 05:50';EndTime=[datetime]'2026-10-15 06:45'} -EA SilentlyContinue |
+ select TimeCreated,Id,Message | ft -AutoSize -Wrap
+
+Get-MessageTrackingLog -Server SWPHQ-MBS01 -EventId DELIVER -Start ([datetime]'2026-10-14 12:00') -ResultSize Unlimited |
+ group { $_.Timestamp.ToString('dd/MM HH:00') } | select Name,Count | ft -AutoSize
+
+***************
+
 Get-MessageTrackingLog -Server SWPHQ-MBS02 -EventId DELIVER -Start ([datetime]'2026-10-14 08:00') -ResultSize Unlimited |
  group { $_.Timestamp.ToString('dd/MM HH:00') } | select Name,Count | ft -AutoSize
 
