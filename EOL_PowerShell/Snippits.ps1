@@ -1,3 +1,13 @@
+Why?
+Get-WinEvent -ComputerName SWPHQ-MBS01 -FilterHashtable @{LogName='Application';Level=1,2,3;StartTime=(Get-Date).AddDays(-2)} |
+ ? Message -match 'MB1' | select -First 20 TimeCreated,ProviderName,Id,Message | fl
+
+Search-AdminAuditLog -Cmdlets Dismount-Database,Mount-Database,Move-ActiveMailboxDatabase,Set-MailboxDatabase,Suspend-MailboxDatabaseCopy -StartDate (Get-Date).AddDays(-7) |
+ select RunDate,Caller,CmdletName,ObjectModified | ft -AutoSize
+
+Get-WinEvent -ComputerName SWPHQ-MBS01 -LogName 'Microsoft-Exchange-HighAvailability/Operational' -MaxEvents 500 |
+ ? Message -match 'MB1' | select -First 20 TimeCreated,Id,LevelDisplayName,Message | fl
+
 # 1. Ask Windows Installer about this product (5 = installed, -1 = unknown)
 $inst = New-Object -ComObject WindowsInstaller.Installer
 $code = '{A33B0230-6095-48B2-A19E-F1979B595BBD}'
